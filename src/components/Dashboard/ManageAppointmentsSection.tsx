@@ -89,9 +89,13 @@ function getAppointmentTotalDuration(app: Appointment): number {
 }
 
 function isAppointmentPastEndTime(app: Appointment): boolean {
-  const start = new Date(app.appointment_date).getTime();
-  const durationMs = getAppointmentTotalDuration(app) * 60 * 1000;
-  return Date.now() >= start + durationMs;
+  const startDate = new Date(app.appointment_date);
+  if (Number.isNaN(startDate.getTime())) return false;
+  const start = startDate.getTime();
+  const durationMin = getAppointmentTotalDuration(app);
+  const durationMs = durationMin * 60 * 1000;
+  const endTime = start + durationMs;
+  return Date.now() >= endTime;
 }
 
 interface WeekCalendarViewProps {
@@ -205,8 +209,16 @@ function WeekCalendarView({
               {Array.from({ length: totalSlots }, (_, i) => {
                 const hour = hourStart + Math.floor(i / SLOTS_PER_HOUR);
                 const label = i % SLOTS_PER_HOUR === 0 ? `${hour.toString().padStart(2, '0')}:00` : '';
+                const isHourStart = i % SLOTS_PER_HOUR === 0;
                 return (
-                  <View key={i} style={[styles.calendarRow, { height: SLOT_HEIGHT }]}>
+                  <View
+                    key={i}
+                    style={[
+                      styles.calendarRow,
+                      { height: SLOT_HEIGHT },
+                      isHourStart && styles.calendarRowHourLine,
+                    ]}
+                  >
                     <View style={[styles.timeCell, { width: TIME_COLUMN_WIDTH }]}>
                       {label ? <Text variant="bodySmall" style={styles.timeLabel}>{label}</Text> : null}
                     </View>
@@ -229,7 +241,7 @@ function WeekCalendarView({
                       top: 36 + top,
                       width,
                       height,
-                      backgroundColor: color,
+                      backgroundColor: String(app.status).toLowerCase() === 'completed' ? theme.colors.primary.main : color,
                     },
                   ]}
                   onPress={() => onAppointmentPress(app)}
@@ -284,12 +296,25 @@ export const ManageAppointmentsSection = ({ onRefresh }: ManageAppointmentsSecti
       const toAutoComplete = data.filter(
         (a) => (a.status === 'pending' || a.status === 'confirmed') && isAppointmentPastEndTime(a)
       );
+
       if (toAutoComplete.length > 0) {
+        const completedIds = new Set(toAutoComplete.map((a) => a.id));
+        setAppointments(
+          data.map((a) =>
+            completedIds.has(a.id!) ? { ...a, status: 'completed' as const } : a
+          )
+        );
         await Promise.allSettled(
           toAutoComplete.map((a) => ApiService.updateAppointment(a.id!, { status: 'completed' } as any))
         );
         const refreshed = await ApiService.getCompanyAppointments(undefined, statusFilter);
-        setAppointments(refreshed);
+        setAppointments(
+          refreshed.map((a) => {
+            if (!completedIds.has(a.id!)) return a;
+            if (a.status === 'completed') return a;
+            return { ...a, status: 'completed' as const };
+          })
+        );
       } else {
         setAppointments(data);
       }
@@ -528,6 +553,7 @@ export const ManageAppointmentsSection = ({ onRefresh }: ManageAppointmentsSecti
           onAppointmentPress={handleEditAppointment}
           getStatusColor={getStatusColor}
           getBlockColor={(app) => {
+            if (String(app.status).toLowerCase() === 'completed') return theme.colors.primary.main;
             if ((app.status === 'pending' || app.status === 'confirmed') && isAppointmentPastEndTime(app)) {
               return theme.colors.info.main;
             }
@@ -719,6 +745,10 @@ const styles = StyleSheet.create({
   },
   calendarRow: {
     flexDirection: 'row',
+  },
+  calendarRowHourLine: {
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.neutral[200],
   },
   timeCell: {
     justifyContent: 'flex-start',

@@ -80,6 +80,9 @@ export interface AuthContextType {
   refreshToken: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  /** Last login error message from API (survives re-mount); null when cleared. */
+  loginError: string | null;
+  clearLoginError: () => void;
   login: (credentials: LoginCredentials) => Promise<void>;
   signup: (data: SignupData) => Promise<void>;
   /** Update current user's profile fields (e.g., home address). Returns updated user. */

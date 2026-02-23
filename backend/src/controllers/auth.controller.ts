@@ -54,7 +54,7 @@ export const createAuthController = () => {
         if (!user) {
           res.status(401).json({
             success: false,
-            message: 'Invalid email or password'
+            message: 'No account found with this email'
           });
           return;
         }
@@ -65,7 +65,7 @@ export const createAuthController = () => {
         if (!isPasswordValid) {
           res.status(401).json({
             success: false,
-            message: 'Invalid email or password'
+            message: 'Invalid password'
           });
           return;
         }

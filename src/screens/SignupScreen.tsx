@@ -84,6 +84,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation }) => {
     confirmPassword: false,
   });
   const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const MIN_PASSWORD_LENGTH = 8;
   const SPECIAL_CHAR_REGEX = /[^A-Za-z0-9]/;
@@ -223,11 +224,11 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation }) => {
     setTouched({ fullName: true, email: true, password: true, confirmPassword: true });
 
     if (!isFormValid) {
-      // Optional: keep a gentle top-level hint, but the main feedback is inline.
-      Alert.alert('Corectează câmpurile evidențiate', 'Corectează erorile afișate cu roșu.');
+      setSubmitError('Corectează erorile afișate cu roșu mai jos.');
       return;
     }
 
+    setSubmitError('');
     try {
       setLoading(true);
 
@@ -262,11 +263,13 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation }) => {
       const rawMsg = String(error?.message || '').trim();
       const msgLower = rawMsg.toLowerCase();
 
-      // Friendly mapping for duplicate emails (backend returns 409 with a clear message)
-      if (msgLower.includes('email already exists') || msgLower.includes('account with this email already exists')) {
-        Alert.alert('Email deja folosit', 'Există deja un cont cu acest email. Încearcă să te autentifici.');
+      // Erori specifice: cont existent pentru email sau număr de telefon (afișate pe pagină cu text roșu)
+      if (msgLower.includes('email already exists') || msgLower.includes('account with this email already exists') || msgLower.includes('this email already exists')) {
+        setSubmitError('Există deja un cont pentru această adresă de email. Autentifică-te sau folosește alt email.');
+      } else if (msgLower.includes('phone already exists') || msgLower.includes('număr de telefon') || msgLower.includes('this phone already exists')) {
+        setSubmitError('Există deja un cont pentru acest număr de telefon. Autentifică-te sau folosește alt număr.');
       } else {
-        Alert.alert('Înregistrare eșuată', rawMsg || 'A apărut o eroare la înregistrare.');
+        setSubmitError(rawMsg || 'A apărut o eroare la înregistrare.');
       }
     } finally {
       setLoading(false);
@@ -380,6 +383,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation }) => {
                   value={email}
                     onChangeText={(t) => {
                       setEmail(t);
+                      if (submitError) setSubmitError('');
                       if (!touched.email) setTouched((p) => ({ ...p, email: true }));
                     }}
                     onBlur={() => setTouched((p) => ({ ...p, email: true }))}
@@ -772,6 +776,13 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation }) => {
                 )}
               </View>
 
+              {submitError ? (
+                <View style={styles.submitErrorContainer}>
+                  <Ionicons name="alert-circle" size={18} color="#dc2626" style={styles.errorIcon} />
+                  <Text style={styles.submitErrorText}>{submitError}</Text>
+                </View>
+              ) : null}
+
               {/* Sign Up Button */}
               <TouchableOpacity
                 style={styles.signUpButton}
@@ -1016,6 +1027,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#ff4444',
     marginLeft: 6,
+  },
+  submitErrorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fef2f2',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  errorIcon: {
+    marginRight: 8,
+  },
+  submitErrorText: {
+    flex: 1,
+    fontSize: 15,
+    color: '#dc2626',
+    fontWeight: '500',
   },
   signUpButton: {
     marginTop: 10,

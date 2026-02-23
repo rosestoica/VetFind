@@ -32,6 +32,7 @@ import {
   Surface,
   Portal,
   Modal,
+  Snackbar,
 } from 'react-native-paper';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { ApiService } from '../services/api';
@@ -115,11 +116,24 @@ export const BookAppointmentScreen = ({ route, navigation }: BookAppointmentScre
   // State management
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
+  /** First step: selected hour (e.g. "08"). When set, user then chooses minute. */
+  const [selectedHour, setSelectedHour] = useState<string | null>(null);
+  /** Second step: selected minute (e.g. "00", "30"). Together with selectedHour sets selectedSlot. */
+  const [selectedMinute, setSelectedMinute] = useState<string | null>(null);
+  const [showHourPicker, setShowHourPicker] = useState(false);
+  const [showMinutePicker, setShowMinutePicker] = useState(false);
   const [availableDays, setAvailableDays] = useState<DayAvailability[]>([]);
   const [loading, setLoading] = useState(false);
   const [notes, setNotes] = useState('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showAnimatedConfirm, setShowAnimatedConfirm] = useState(false);
+  /** Mesaj de eroare la validare (ex. niciun serviciu selectat) – afișat în Snackbar */
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Șterge mesajul de eroare când utilizatorul selectează cel puțin un serviciu
+  useEffect(() => {
+    if (selectedServicesState.length >= 1) setValidationError(null);
+  }, [selectedServicesState.length]);
 
   // Generate next 30 days for calendar
   const [calendarDates, setCalendarDates] = useState<Date[]>([]);
@@ -253,24 +267,47 @@ export const BookAppointmentScreen = ({ route, navigation }: BookAppointmentScre
    */
   const handleDateSelect = (date: Date) => {
     setSelectedDate(date);
-    setSelectedSlot(null); // Reset slot selection
+    setSelectedSlot(null);
+    setSelectedHour(null);
+    setSelectedMinute(null);
   };
 
   /**
-   * Handle slot selection
+   * Handle slot selection (used when both hour and minute are chosen via dropdowns)
    */
   const handleSlotSelect = (slot: TimeSlot) => {
     const slotKey = slot.datetime || `${slot.date}T${slot.time}`;
-    // Only allow selecting slots that we computed as valid starts (enough consecutive availability)
-    // validStartSet is computed below in render scope
     try {
       if ((validStartSet && validStartSet.has(slotKey)) || slot.available) {
         setSelectedSlot(slot);
       }
     } catch {
-      // Fallback: if computation fails for any reason, allow selecting only if slot.available
       if (slot.available) setSelectedSlot(slot);
     }
+  };
+
+  /** When user selects hour: clear minute and slot; open minute picker after if desired we keep it closed until they tap "Alege minutul" */
+  const handleHourSelect = (hour: string) => {
+    setSelectedHour(hour);
+    setSelectedMinute(null);
+    setSelectedSlot(null);
+    setShowHourPicker(false);
+  };
+
+  /** When user selects minute: find slot and set it */
+  const handleMinuteSelect = (minute: string, validStartSet: Set<string>, slots: TimeSlot[]) => {
+    if (!selectedHour) return;
+    const timeStr = `${selectedHour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+    const slot = slots.find((s) => {
+      const [h, m] = s.time.split(':');
+      return h === selectedHour.padStart(2, '0') && m === minute.padStart(2, '0');
+    });
+    const slotKey = slot ? (slot.datetime || `${slot.date}T${slot.time}`) : '';
+    if (slot && (validStartSet.has(slotKey) || slot.available)) {
+      setSelectedMinute(minute);
+      setSelectedSlot(slot);
+    }
+    setShowMinutePicker(false);
   };
 
   /**
@@ -279,6 +316,13 @@ export const BookAppointmentScreen = ({ route, navigation }: BookAppointmentScre
   const handleBookAppointment = async () => {
     if (!selectedSlot) {
       Alert.alert('Selectare necesară', 'Te rugăm să alegi data și ora pentru programare.');
+      return;
+    }
+    if (selectedServicesState.length < 1) {
+      const msg = 'Te rugăm să selectezi cel puțin un serviciu înainte de a confirma programarea.';
+      setValidationError(msg);
+      setShowConfirmModal(false);
+      Alert.alert('Serviciu necesar', msg);
       return;
     }
 
@@ -441,6 +485,29 @@ export const BookAppointmentScreen = ({ route, navigation }: BookAppointmentScre
 
   const validStartSet = computeValidStartSet();
 
+  // Ore disponibile (doar ore care au cel puțin un slot valid)
+  const availableHours = (() => {
+    const set = new Set<string>();
+    slots.forEach((s) => {
+      const key = s.datetime || `${s.date}T${s.time}`;
+      if (validStartSet.has(key)) set.add(s.time.split(':')[0]);
+    });
+    return Array.from(set).sort((a, b) => Number(a) - Number(b));
+  })();
+
+  // Minute disponibile pentru ora selectată (sloturi valide care încep în acea oră)
+  const availableMinutesForSelectedHour = (() => {
+    if (!selectedHour) return [];
+    const set = new Set<string>();
+    slots.forEach((s) => {
+      const [h] = s.time.split(':');
+      if (h !== selectedHour) return;
+      const key = s.datetime || `${s.date}T${s.time}`;
+      if (validStartSet.has(key)) set.add(s.time.split(':')[1]);
+    });
+    return Array.from(set).sort((a, b) => Number(a) - Number(b));
+  })();
+
   return (
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -585,11 +652,11 @@ export const BookAppointmentScreen = ({ route, navigation }: BookAppointmentScre
 
         <Divider />
 
-        {/* Time Slots Section */}
+        {/* Time selection: first Ora (hour), then Minut (minute) */}
         {selectedDate && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>
-              Available Times - {selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+              Alege ora – {selectedDate.toLocaleDateString('ro-RO', { month: 'long', day: 'numeric' })}
             </Text>
 
             {loading ? (
@@ -607,44 +674,125 @@ export const BookAppointmentScreen = ({ route, navigation }: BookAppointmentScre
                 <Text style={styles.emptySubtext}>Te rugăm să alegi altă dată</Text>
               </View>
             ) : (
-              <View style={styles.slotsGrid}>
-                {slots.map((slot, index) => {
-                  const isSelected = selectedSlot?.time === slot.time;
-                  const formattedTime = formatTime12Hour(slot.time);
-                  // A slot is selectable only if it's in validStartSet (i.e. enough consecutive available slots exist)
-                  const slotKey = slot.datetime || `${slot.date}T${slot.time}`;
-                  const isSelectable = validStartSet.has(slotKey);
+              <>
+                {/* Step 1: Alege ora – dropdown inline */}
+                <Text style={styles.dropdownLabel}>Alege ora</Text>
+                <View style={styles.dropdownWrapper}>
+                  <TouchableOpacity
+                    style={[styles.dropdownTrigger, showHourPicker && styles.dropdownTriggerOpen]}
+                    onPress={() => {
+                      setShowMinutePicker(false);
+                      setShowHourPicker((v) => !v);
+                    }}
+                    activeOpacity={0.7}
+                    {...a11yProps.button('Alege ora', 'Deschide lista de ore disponibile')}
+                  >
+                    <Text style={[styles.dropdownTriggerText, !selectedHour && styles.dropdownPlaceholder]}>
+                      {selectedHour != null ? selectedHour.padStart(2, '0') : 'Selectează ora'}
+                    </Text>
+                    <Ionicons
+                      name={showHourPicker ? 'chevron-up' : 'chevron-down'}
+                      size={20}
+                      color="#6b7280"
+                    />
+                  </TouchableOpacity>
+                  {showHourPicker && (
+                    <View style={styles.dropdownList}>
+                      <ScrollView
+                        style={styles.dropdownListScroll}
+                        nestedScrollEnabled
+                        keyboardShouldPersistTaps="handled"
+                      >
+                        {availableHours.map((hour) => (
+                          <TouchableOpacity
+                            key={hour}
+                            style={[styles.dropdownOption, selectedHour === hour && styles.dropdownOptionSelected]}
+                            onPress={() => handleHourSelect(hour)}
+                            activeOpacity={0.7}
+                          >
+                            <Text
+                              style={[
+                                styles.dropdownOptionText,
+                                selectedHour === hour && styles.dropdownOptionTextSelected,
+                              ]}
+                            >
+                              {hour.padStart(2, '0')}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
 
-                  return (
+                {/* Step 2: Alege minutul – dropdown inline (shown only after hour is selected) */}
+                {selectedHour != null && (
+                  <View style={styles.dropdownWrapper}>
+                    <Text style={[styles.dropdownLabel, { marginTop: 16 }]}>Alege minutul de start</Text>
                     <TouchableOpacity
-                      key={index}
-                      style={[
-                        styles.slotChip,
-                        isSelected && styles.slotChipSelected,
-                        !isSelectable && styles.slotChipDisabled,
-                      ]}
-                      onPress={() => handleSlotSelect(slot)}
-                      disabled={!isSelectable}
+                      style={[styles.dropdownTrigger, showMinutePicker && styles.dropdownTriggerOpen]}
+                      onPress={() => {
+                        if (availableMinutesForSelectedHour.length > 0) {
+                          setShowHourPicker(false);
+                          setShowMinutePicker((v) => !v);
+                        }
+                      }}
                       activeOpacity={0.7}
-                      {...a11yProps.button(
-                        a11yLabels.timeSlot(formattedTime, isSelectable),
-                        isSelectable ? 'Book appointment at this time' : 'Time slot not available for full duration',
-                        !isSelectable
-                      )}
+                      disabled={availableMinutesForSelectedHour.length === 0}
+                      {...a11yProps.button('Alege minutul', 'Deschide lista de minute disponibile')}
                     >
                       <Text
                         style={[
-                          styles.slotText,
-                          isSelected && styles.slotTextSelected,
-                          !isSelectable && styles.slotTextDisabled,
+                          styles.dropdownTriggerText,
+                          !selectedMinute && styles.dropdownPlaceholder,
+                          availableMinutesForSelectedHour.length === 0 && styles.dropdownPlaceholder,
                         ]}
                       >
-                        {formattedTime}
+                        {selectedMinute != null
+                          ? `${selectedHour.padStart(2, '0')}:${selectedMinute.padStart(2, '0')}`
+                          : availableMinutesForSelectedHour.length === 0
+                            ? 'Nicio minut disponibil'
+                            : 'Selectează minutul'}
                       </Text>
+                      <Ionicons
+                        name={showMinutePicker ? 'chevron-up' : 'chevron-down'}
+                        size={20}
+                        color="#6b7280"
+                      />
                     </TouchableOpacity>
-                  );
-                })}
-              </View>
+                    {showMinutePicker && availableMinutesForSelectedHour.length > 0 && (
+                      <View style={styles.dropdownList}>
+                        <ScrollView
+                          style={styles.dropdownListScroll}
+                          nestedScrollEnabled
+                          keyboardShouldPersistTaps="handled"
+                        >
+                          {availableMinutesForSelectedHour.map((minute) => (
+                            <TouchableOpacity
+                              key={minute}
+                              style={[
+                                styles.dropdownOption,
+                                selectedMinute === minute && styles.dropdownOptionSelected,
+                              ]}
+                              onPress={() => handleMinuteSelect(minute, validStartSet, slots)}
+                              activeOpacity={0.7}
+                            >
+                              <Text
+                                style={[
+                                  styles.dropdownOptionText,
+                                  selectedMinute === minute && styles.dropdownOptionTextSelected,
+                                ]}
+                              >
+                                {selectedHour.padStart(2, '0')}:{minute.padStart(2, '0')}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </>
             )}
           </View>
         )}
@@ -682,7 +830,16 @@ export const BookAppointmentScreen = ({ route, navigation }: BookAppointmentScre
             </View>
             <Button
               mode="contained"
-              onPress={() => setShowConfirmModal(true)}
+              onPress={() => {
+                if (selectedServicesState.length < 1) {
+                  const msg = 'Te rugăm să selectezi cel puțin un serviciu înainte de a confirma programarea.';
+                  setValidationError(msg);
+                  Alert.alert('Serviciu necesar', msg);
+                  return;
+                }
+                setValidationError(null);
+                setShowConfirmModal(true);
+              }}
               style={styles.bookButton}
               contentStyle={styles.bookButtonContent}
               labelStyle={styles.bookButtonLabel}
@@ -789,6 +946,20 @@ export const BookAppointmentScreen = ({ route, navigation }: BookAppointmentScre
           navigation.navigate('UserDashboard');
         }}
       />
+
+      {/* Mesaj de eroare la validare (ex. niciun serviciu selectat) */}
+      <Snackbar
+        visible={validationError != null}
+        onDismiss={() => setValidationError(null)}
+        duration={5000}
+        style={styles.snackbarError}
+        action={{
+          label: 'OK',
+          onPress: () => setValidationError(null),
+        }}
+      >
+        {validationError}
+      </Snackbar>
     </View>
   );
 };
@@ -1031,6 +1202,68 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#9ca3af',
   },
+  dropdownLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  dropdownTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#ffffff',
+  },
+  dropdownTriggerText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  dropdownPlaceholder: {
+    color: '#9ca3af',
+  },
+  dropdownWrapper: {
+    marginBottom: 4,
+  },
+  dropdownTriggerOpen: {
+    borderColor: '#7c3aed',
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+  },
+  dropdownList: {
+    borderWidth: 2,
+    borderTopWidth: 0,
+    borderColor: '#e5e7eb',
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+    backgroundColor: '#ffffff',
+    maxHeight: 200,
+  },
+  dropdownListScroll: {
+    maxHeight: 198,
+  },
+  dropdownOption: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e5e7eb',
+  },
+  dropdownOptionSelected: {
+    backgroundColor: '#ede9fe',
+  },
+  dropdownOptionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  dropdownOptionTextSelected: {
+    color: '#7c3aed',
+  },
   slotsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1172,6 +1405,9 @@ const styles = StyleSheet.create({
   modalActions: {
     justifyContent: 'flex-end',
     paddingTop: 8,
+  },
+  snackbarError: {
+    backgroundColor: '#b91c1c',
   },
 });
 

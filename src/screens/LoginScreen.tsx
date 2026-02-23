@@ -10,7 +10,6 @@ import {
   Platform,
   ScrollView,
   Dimensions,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -24,22 +23,38 @@ interface LoginScreenProps {
   navigation?: any;
 }
 
+function getLoginErrorRomanian(rawMessage: string): string {
+  const msg = (rawMessage || '').trim().toLowerCase();
+  if (msg.includes('no account') || msg.includes('not found') || msg.includes('this email')) {
+    return 'Nu există cont asociat acestei adrese de email. Verifică adresa sau creează un cont.';
+  }
+  if (msg.includes('invalid password') || msg.includes('parola')) {
+    return 'Parola introdusă este incorectă. Încearcă din nou.';
+  }
+  return 'Email sau parolă invalidă. Verifică datele introduse.';
+}
+
 const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
-  const { login } = useAuth();
+  const { login, loginError, clearLoginError } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  const displayError = errorMessage || (loginError ? getLoginErrorRomanian(loginError) : '');
 
   const handleLogin = async () => {
+    setErrorMessage('');
+    clearLoginError();
     // Validate input
     if (!email.trim()) {
-      Alert.alert('Eroare', 'Introdu adresa de email.');
+      setErrorMessage('Introdu adresa de email.');
       return;
     }
 
     if (!password) {
-      Alert.alert('Eroare', 'Introdu parola.');
+      setErrorMessage('Introdu parola.');
       return;
     }
 
@@ -52,8 +67,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
       });
 
       // No need to navigate - AuthContext will handle it automatically
-    } catch (error: any) {
-      Alert.alert('Autentificare eșuată', error.message || 'Email sau parolă invalidă.');
+    } catch (_error: any) {
+      // Eroarea e deja setată în context (loginError) și supraviețuiește la re-mount
     } finally {
       setLoading(false);
     }
@@ -122,13 +137,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                   placeholder="email@domeniu.com"
                   placeholderTextColor="#a0a0a0"
                   value={email}
-                  onChangeText={setEmail}
+                  onChangeText={(t) => { setEmail(t); setErrorMessage(''); clearLoginError(); }}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
                   returnKeyType="next"
                 />
               </View>
+
+              {displayError ? (
+                <View style={styles.errorContainer}>
+                  <Ionicons name="alert-circle" size={18} color="#dc2626" style={styles.errorIcon} />
+                  <Text style={styles.errorText}>{displayError}</Text>
+                </View>
+              ) : null}
 
               {/* Password Input */}
               <View style={styles.inputContainer}>
@@ -142,7 +164,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                     placeholder="••••••••••••"
                     placeholderTextColor="#a0a0a0"
                     value={password}
-                    onChangeText={setPassword}
+                    onChangeText={(t) => { setPassword(t); setErrorMessage(''); clearLoginError(); }}
                     secureTextEntry={!showPassword}
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -382,6 +404,26 @@ const styles = StyleSheet.create({
     right: 15,
     top: '50%',
     transform: [{ translateY: -11 }],
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fef2f2',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  errorIcon: {
+    marginRight: 8,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 15,
+    color: '#dc2626',
+    fontWeight: '500',
   },
   loginButton: {
     marginTop: 10,

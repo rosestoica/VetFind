@@ -13,7 +13,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const STORAGE_KEYS = {
   ACCESS_TOKEN: 'accessToken',
   REFRESH_TOKEN: 'refreshToken',
-  USER_DATA: 'userData'
+  USER_DATA: 'userData',
+  LOGIN_ERROR: 'vetfind_loginError'
 };
 
 interface AuthProviderProps {
@@ -25,8 +26,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [refreshToken, setRefreshToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [loginError, setLoginError] = useState<string | null>(() => {
+    if (typeof window === 'undefined' || !window.sessionStorage) return null;
+    try {
+      return window.sessionStorage.getItem(STORAGE_KEYS.LOGIN_ERROR);
+    } catch {
+      return null;
+    }
+  });
 
   const isAuthenticated = !!user && !!accessToken;
+  const clearLoginError = () => {
+    setLoginError(null);
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      try { window.sessionStorage.removeItem(STORAGE_KEYS.LOGIN_ERROR); } catch (_) {}
+    }
+  };
 
   // Check authentication on app startup
   useEffect(() => {
@@ -121,6 +136,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         localStorage.setItem('userData', JSON.stringify(response.user));
       }
 
+      setLoginError(null);
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        try { window.sessionStorage.removeItem(STORAGE_KEYS.LOGIN_ERROR); } catch (_) {}
+      }
       // Set user state first, then loading state
       setUser(response.user);
       setAccessToken(response.accessToken);
@@ -129,8 +148,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Small delay to ensure state is propagated
       await new Promise(resolve => setTimeout(resolve, 100));
       setIsLoading(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login failed:', error);
+      const msg = error?.message ?? 'Login failed';
+      setLoginError(msg);
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        try { window.sessionStorage.setItem(STORAGE_KEYS.LOGIN_ERROR, msg); } catch (_) {}
+      }
       setIsLoading(false);
       throw error;
     }
@@ -246,6 +270,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     refreshToken,
     isLoading,
     isAuthenticated,
+    loginError,
+    clearLoginError,
     login,
     signup,
     updateUser,
