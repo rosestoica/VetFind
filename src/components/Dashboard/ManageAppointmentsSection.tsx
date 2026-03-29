@@ -1293,7 +1293,7 @@ const styles = StyleSheet.create({
   },
   dayModeOuterFrame: {
     borderWidth: 1,
-    borderColor: theme.colors.neutral[200],
+    borderColor: theme.colors.surface.border,
     borderRadius: theme.borderRadius.lg,
     padding: 4,
     backgroundColor: theme.colors.primary[50],
@@ -1426,7 +1426,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: theme.colors.neutral[200],
+    borderColor: theme.colors.surface.border,
     backgroundColor: theme.colors.primary[50],
     overflow: 'hidden',
   },
@@ -1623,7 +1623,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
-    backgroundColor: theme.colors.neutral[50],
+    backgroundColor: theme.colors.surface.cream,
     paddingHorizontal: theme.spacing.xs,
     paddingVertical: 2,
     borderRadius: 999,
@@ -1662,7 +1662,7 @@ const styles = StyleSheet.create({
   notesContainer: {
     marginTop: theme.spacing.sm,
     padding: theme.spacing.sm,
-    backgroundColor: theme.colors.neutral[50],
+    backgroundColor: theme.colors.surface.cream,
     borderRadius: 8,
   },
   notesLabel: {

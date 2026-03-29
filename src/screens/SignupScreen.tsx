@@ -296,7 +296,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation }) => {
 
   return (
     <LinearGradient
-      colors={['#f5f3ff', '#ede9fe', '#f5f3ff']}
+      colors={['#ffffff', '#ffffff', '#ffffff']}
       style={styles.container}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}

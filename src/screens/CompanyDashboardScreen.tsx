@@ -343,7 +343,7 @@ export const CompanyDashboardScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.neutral[100],  // Warm beige instead of gray
+    backgroundColor: theme.colors.surface.background,
   },
   contentContainer: {
     paddingBottom: theme.spacing['3xl'],
@@ -352,7 +352,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: theme.colors.neutral[50],
+    backgroundColor: theme.colors.surface.background,
   },
   loadingText: {
     marginTop: theme.spacing.lg,
@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: theme.colors.neutral[50],
+    backgroundColor: theme.colors.surface.background,
     padding: theme.spacing['2xl'],
   },
   errorText: {

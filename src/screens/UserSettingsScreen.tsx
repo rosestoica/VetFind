@@ -273,19 +273,19 @@ export const UserSettingsScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.neutral[100] },
+  container: { flex: 1, backgroundColor: theme.colors.surface.background },
   content: { padding: theme.spacing.lg, gap: 10 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
   title: { fontSize: 20, fontWeight: '800', color: theme.colors.neutral[900] },
   sectionTitle: { fontSize: 16, fontWeight: '800', color: theme.colors.neutral[800], marginTop: 8 },
   sectionSubtitle: { color: theme.colors.neutral[600], marginBottom: 6 },
-  input: { backgroundColor: theme.colors.neutral[50] },
+  input: { backgroundColor: theme.colors.surface.cream },
   err: { color: theme.colors.error.main, fontSize: 12, marginTop: -6 },
   row: { flexDirection: 'row', gap: 10 },
   flex1: { flex: 1 },
   picker: { marginTop: 4 },
   actions: { flexDirection: 'row', gap: 10, marginTop: 12, justifyContent: 'space-between' },
-  coords: { marginTop: 14, padding: 12, borderRadius: 12, backgroundColor: theme.colors.neutral[50], borderWidth: 1, borderColor: theme.colors.neutral[200] },
+  coords: { marginTop: 14, padding: 12, borderRadius: 12, backgroundColor: theme.colors.surface.cream, borderWidth: 1, borderColor: theme.colors.surface.border },
   coordsLabel: { color: theme.colors.neutral[600], fontWeight: '700' },
   coordsValue: { color: theme.colors.neutral[900], marginTop: 4, fontWeight: '700' },
 });

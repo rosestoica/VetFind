@@ -32,8 +32,8 @@ Conține:
   - Emergency Care: Emergency Consultation → Consult urgențe, Emergency Surgery → Chirurgie urgențe, Overnight Hospitalization → Spitalizare, Wound Treatment → Tratament răni, Poison Treatment → Tratament intoxicații
   - Surgical Procedures: Spay (Cat/Dog) → Sterilizare (pisică/câine), Neuter (Cat/Dog) → Castrare (pisică/câine), Soft Tissue Surgery → Chirurgie țesuturi moi, Orthopedic Surgery → Chirurgie ortopedică, Tumor Removal → Ablație tumoare
   - Grooming: Bath & Brush → Baie și periat, Full Grooming → Toaletare completă, Haircut/Trim → Tuns/Aruncat, Ear Cleaning → Curățare urechi, Anal Gland Expression → Expresie glande anale
-- **Mapă pentru cheile de categorie (ServiceCategoryType):**  
-  `routine_care`, `dental_care`, `diagnostic_services`, `emergency_care`, `surgical_procedures`, `grooming`, `custom` → același text RO ca mai sus (și `custom` → „Serviciu personalizat” sau „Custom”).
+- **Mapă pentru cheile de categorie (ServiceCategoryType):**
+`routine_care`, `dental_care`, `diagnostic_services`, `emergency_care`, `surgical_procedures`, `grooming`, `custom` → același text RO ca mai sus (și `custom` → „Serviciu personalizat” sau „Custom”).
 - **Funcții helper:**
   - `translateCategoryName(enName: string): string` — returnează RO din mapă sau `enName` dacă nu există.
   - `translateSpecializationName(enName: string): string` — idem pentru specializări.
@@ -142,6 +142,7 @@ Toate textele de mai sus sunt exact traducerile oferite; mapările vor fi implem
 
 ## 4. Rezumat fișiere
 
+
 | Fișier                                                           | Modificări                                                                                                                          |
 | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | **Nou:** `src/constants/serviceTranslations.ts`                  | Mape EN→RO categorii + specializări, etichete RO pentru ServiceCategoryType, `translateCategoryName`, `translateSpecializationName` |
@@ -158,5 +159,6 @@ Toate textele de mai sus sunt exact traducerile oferite; mapările vor fi implem
 | `src/components/Dashboard/QuickActions.tsx`                      | Label „Gestionează servicii” pentru butonul Manage Services                                                                         |
 | `src/screens/MyAppointmentsScreen.tsx`                           | Traducere nume servicii (dacă sunt din listă fixă); fallback „Serviciu”                                                             |
 | `src/screens/UserDashboardScreen.tsx`                            | La fel pentru orice afișare nume serviciu                                                                                           |
+
 
 Traducerile oferite mai sus (Îngrijire de rutină, Consult general, Vaccinare, etc.) sunt cele care vor fi folosite în acest modul și în UI; baza de date nu este modificată.

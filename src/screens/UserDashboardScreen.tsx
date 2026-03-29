@@ -2,15 +2,12 @@
  * UserDashboardScreen - Main dashboard for pet owners
  *
  * Features:
- * - Hero header with title
- * - Location filter banner with distance picker
- * - Scrollable list of vet company cards
- * - Pull-to-refresh functionality
- * - Loading and empty states
- * - Location-based filtering when distance is selected
+ * - Banner VetFinder + bară centrală de căutare (Clinică | Serviciu) tip hero
+ * - Filtru locație, sortare, hartă
+ * - Listă clinici + pull-to-refresh
  */
 
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -22,11 +19,13 @@ import {
   Alert,
   BackHandler,
   Platform,
+  TextInput as RNTextInput,
+  Image,
 } from 'react-native';
-import { Text, ActivityIndicator, Chip, TextInput, Button, Snackbar, Portal, Dialog, Menu } from 'react-native-paper';
+import { Text, ActivityIndicator, Button, Snackbar, Portal, Dialog, Menu } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
-import { useNavigation, useIsFocused } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import WebView from 'react-native-webview';
@@ -34,7 +33,6 @@ import WebView from 'react-native-webview';
 // Web map is rendered via Leaflet inside a WebView/HTML snippet (no Google Maps API key required).
 
 import { ApiService } from '../services/api';
-import { vetApi } from '../services/vetApi';
 import { Company } from '../types/company.types';
 import { RouteDistance } from '../types/routes.types';
 import { RootStackParamList } from '../types/navigation.types';
@@ -42,15 +40,21 @@ import { VetCompanyCard } from '../components/VetCompanyCard';
 import { useLocation, calculateDistance } from '../hooks/useLocation';
 import { useRouteDistance } from '../hooks/useRouteDistance';
 import { useAuth } from '../context/AuthContext';
-import { AppointmentCard, type AppointmentData } from '../components/Dashboard/AppointmentCard';
 import { theme } from '../theme';
-import { formatPriceRange } from '../utils/currency';
-import { translateSpecializationName } from '../constants/serviceTranslations';
 import LeafletMapWeb from '../components/LeafletMapWeb';
 
 type NavigationProp = StackNavigationProp<RootStackParamList, 'UserDashboard'>;
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+const HERO_DOG_IMAGE = require('../../assets/caine-removebg-preview.png');
+const HERO_CAT_IMAGE = require('../../assets/pisica-removebg-preview.png');
+/** Pixeli sursă PNG — actualizați dacă înlocuiți asset-urile; aspectRatio evită letterboxing la contain. */
+const HERO_DOG_PX = { w: 341, h: 215 } as const;
+const HERO_CAT_PX = { w: 323, h: 243 } as const;
+const HERO_MASCOT_DISPLAY_WIDTH = Math.min(181, SCREEN_WIDTH * 0.306);
+/** Pisică mai mică decât câinele (doar ea folosește această lățime). */
+const HERO_CAT_DISPLAY_WIDTH = HERO_MASCOT_DISPLAY_WIDTH * 0.8;
 
 /** Leaflet map HTML (works in WebView on native and in iframe/WebView-like HTML). */
 function getMapHtml(
@@ -126,28 +130,16 @@ export const UserDashboardScreen = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isSearching, setIsSearching] = useState(false);
-  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
-  const searchInputRef = useRef<any>(null);
+  /** Căutare după nume/adresă clinică vs după serviciu oferit */
+  const [searchScope, setSearchScope] = useState<'clinic' | 'service'>('service');
+  const [scopeMenuVisible, setScopeMenuVisible] = useState(false);
   const [sortMode, setSortMode] = useState<'none' | 'closest' | 'min_asc' | 'max_desc' | 'rating_desc'>('none');
-  // Snackbar for web/native feedback and a deleting indicator for buttons
+  // Snackbar for web/native feedback
   const [snackVisible, setSnackVisible] = useState(false);
   const [snackMessage, setSnackMessage] = useState('');
   const [menuVisible, setMenuVisible] = useState(false);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
   // Filtru după rază dezactivat – păstrăm variabila mereu null pentru compatibilitate cu codul existent
   const selectedDistance: number | null = null;
-  // Review modal state
-  const [reviewVisible, setReviewVisible] = useState(false);
-  const [reviewClinicId, setReviewClinicId] = useState<number | null>(null);
-  const [reviewRating, setReviewRating] = useState<number>(1);
-  const [reviewComment, setReviewComment] = useState<string>('');
-  const [reviewCategory, setReviewCategory] = useState<'pisica' | 'caine' | 'pasare' | 'altele'>('altele');
-  const [reviewProfessionalism, setReviewProfessionalism] = useState<number>(1);
-  const [reviewEfficiency, setReviewEfficiency] = useState<number>(1);
-  const [reviewFriendliness, setReviewFriendliness] = useState<number>(1);
-  const [reviewSubmitting, setReviewSubmitting] = useState(false);
-  const [myReviews, setMyReviews] = useState<any[]>([]);
-  const [reviewAppointmentId, setReviewAppointmentId] = useState<number | null>(null);
 
   // Map modal state
   const [mapVisible, setMapVisible] = useState(false);
@@ -198,9 +190,8 @@ export const UserDashboardScreen = () => {
   useEffect(() => {
     const onBackPress = () => {
       const hasSearchText = (searchQuery || '').trim().length > 0;
-      if (isSearchExpanded || hasSearchText) {
+      if (hasSearchText) {
         setSearchQuery('');
-        setIsSearchExpanded(false);
         setSortMode('none');
 
         // restore default list
@@ -214,7 +205,7 @@ export const UserDashboardScreen = () => {
 
     const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => sub.remove();
-  }, [companies, isSearchExpanded, searchQuery]);
+  }, [companies, searchQuery]);
 
   // Web/browser back behavior: when searching, back should exit search and keep user on dashboard.
   useEffect(() => {
@@ -222,19 +213,18 @@ export const UserDashboardScreen = () => {
 
     const unsubscribe = navigation.addListener('beforeRemove', (e) => {
       const hasSearchText = (searchQuery || '').trim().length > 0;
-      if (!isSearchExpanded && !hasSearchText) return;
+      if (!hasSearchText) return;
 
       // Prevent leaving the dashboard; instead clear search state.
       e.preventDefault();
       setSearchQuery('');
-      setIsSearchExpanded(false);
       setSortMode('none');
       setFilteredCompanies(companies);
       setCompaniesWithDistance(companies.map((company) => ({ company })));
     });
 
     return unsubscribe;
-  }, [companies, isSearchExpanded, navigation, searchQuery]);
+  }, [companies, navigation, searchQuery]);
 
   /**
    * Fetch all companies from API
@@ -256,118 +246,17 @@ export const UserDashboardScreen = () => {
     }
   }, []);
 
-  // ===== User appointments (pet owner) =====
-  const [userAppointments, setUserAppointments] = useState<any[]>([]);
-  const [isLoadingAppointments, setIsLoadingAppointments] = useState(false);
-  const [expandedAppointments, setExpandedAppointments] = useState<number[]>([]);
-
-  // Dashboard: max 3 appointments. Priority = 1) Completed fără review (mereu primele), 2) Restul după distanța de acum.
-  const getPriorityDashboardAppointments = useCallback(
-    (allAppointments: any[], reviews: any[]) => {
-      const reviewedAppointmentIds = new Set(
-        (reviews || [])
-          .map((r) => (r?.appointment_id ?? (r as any)?.appointment_id))
-          .filter((id) => typeof id === 'number')
-      );
-
-      const now = Date.now();
-      const norm = (a: any) => String(a?.status || '').trim().toLowerCase();
-      const isCompletedNoReview = (a: any) => {
-        const id = a?.id;
-        return norm(a) === 'completed' && (typeof id !== 'number' || !reviewedAppointmentIds.has(id));
-      };
-
-      // 1) Completed fără review: prioritate maximă, indiferent de dată (mereu în top)
-      const completedUnreviewed = (allAppointments || [])
-        .filter((a) => !a?.deleted && isCompletedNoReview(a))
-        .map((a) => ({ a, t: new Date(a?.appointment_date).getTime() }))
-        .filter((x) => x.a)
-        .sort((x, y) => (Number.isFinite(y.t) && Number.isFinite(x.t) ? y.t - x.t : 0)) // cele mai recente primele
-        .map((x) => x.a);
-
-      // 2) Altele eligibile: doar pending/confirmed (cancelled nu apar în top 3, doar la "Vezi toate")
-      const others = (allAppointments || [])
-        .filter((a) => !a?.deleted && !isCompletedNoReview(a))
-        .filter((a) => {
-          const status = norm(a);
-          return status === 'pending' || status === 'confirmed';
-        })
-        .map((a) => ({
-          a,
-          delta: Math.abs(new Date(a?.appointment_date).getTime() - now),
-        }))
-        .filter((x) => Number.isFinite(x.delta))
-        .sort((x, y) => x.delta - y.delta)
-        .map((x) => x.a);
-
-      // Întâi toate completed-unreviewed (până la 3), apoi completăm cu "others" până la 3
-      const combined = [...completedUnreviewed, ...others];
-      return combined.slice(0, 3);
-    },
-    []
-  );
-
-  const toggleExpand = (id: number) => {
-    setExpandedAppointments((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  };
-
-  const fetchUserAppointments = useCallback(async () => {
-    try {
-      setIsLoadingAppointments(true);
-      const data = await ApiService.getUserAppointments();
-      // Ensure we don't show appointments that have been soft-deleted
-      setUserAppointments((data || []).filter((a: any) => !a.deleted));
-    } catch (err: any) {
-      console.error('Error fetching user appointments:', err);
-      setUserAppointments([]);
-    } finally {
-      setIsLoadingAppointments(false);
-    }
-  }, []);
-
-  const fetchMyReviews = useCallback(async () => {
-    try {
-      const data = await vetApi.reviews.getMyReviews();
-      setMyReviews(data || []);
-    } catch (err: any) {
-      console.error('Error fetching my reviews:', err);
-      setMyReviews([]);
-    }
-  }, []);
-
-  const priorityAppointments = getPriorityDashboardAppointments(userAppointments, myReviews);
-  const hasAnyDashboardEligibleAppointments =
-    (userAppointments || []).filter((a) => {
-      const status = String(a?.status || '').trim().toLowerCase();
-      if (status === 'pending' || status === 'confirmed') return true;
-      if (status === 'completed') {
-        const hasReviewed = myReviews.some((r) => (r?.appointment_id ?? (r as any)?.appointment_id) === a?.id);
-        return !hasReviewed;
-      }
-      return false;
-    }).length > 0;
-
-  const isFocused = useIsFocused();
-
-  useEffect(() => {
-    if (isFocused) {
-      fetchUserAppointments();
-      fetchMyReviews();
-    }
-  }, [isFocused, fetchUserAppointments, fetchMyReviews]);
-
   /**
    * Initial data load
    */
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
-      // load companies and user appointments in parallel
-      await Promise.all([fetchCompanies(), fetchUserAppointments(), fetchMyReviews()]);
+      await fetchCompanies();
       setIsLoading(false);
     };
     loadData();
-  }, [fetchCompanies, fetchUserAppointments]);
+  }, [fetchCompanies]);
 
   /**
    * Filter and calculate distances when location or distance filter changes
@@ -542,18 +431,99 @@ export const UserDashboardScreen = () => {
     [companies, filteredCompanies, location, effectiveLocation, selectedDistance, sortMode, isLocationActive, sortAllCompaniesByDistance]
   );
 
+  /**
+   * Filtrează clinicile după nume, adresă, oraș, județ sau descriere.
+   */
+  const searchCompaniesByClinic = useCallback(
+    async (query: string) => {
+      const q = query.trim().toLowerCase();
+      if (!q) {
+        if (isLocationActive && sortMode === 'closest') {
+          sortAllCompaniesByDistance();
+        } else {
+          setFilteredCompanies(companies);
+          setCompaniesWithDistance(companies.map((company) => ({ company })));
+        }
+        setIsSearching(false);
+        return;
+      }
+
+      setIsSearching(true);
+
+      try {
+        const baseList = selectedDistance === null ? companies : filteredCompanies.length ? filteredCompanies : companies;
+
+        const matches: Array<{ company: Company; distance?: number }> = [];
+
+        for (const company of baseList) {
+          const name = (company.name || '').toLowerCase();
+          const address = (company.address || '').toLowerCase();
+          const city = (company.city || '').toLowerCase();
+          const county = (company.county || '').toLowerCase();
+          const desc = (company.description || '').toLowerCase();
+          if (name.includes(q) || address.includes(q) || city.includes(q) || county.includes(q) || desc.includes(q)) {
+            let d: number | undefined = undefined;
+            const orig = effectiveLocation || location;
+            if (orig && company.latitude && company.longitude) {
+              d = calculateDistance(orig.latitude, orig.longitude, company.latitude, company.longitude);
+            }
+            matches.push({ company, distance: d });
+          }
+        }
+
+        matches.sort((a, b) => {
+          if (a.distance === undefined) return 1;
+          if (b.distance === undefined) return -1;
+          return a.distance - b.distance;
+        });
+
+        if (sortMode === 'closest') {
+          matches.sort((a, b) => {
+            const ad = typeof a.distance === 'number' ? a.distance : Number.POSITIVE_INFINITY;
+            const bd = typeof b.distance === 'number' ? b.distance : Number.POSITIVE_INFINITY;
+            return ad - bd;
+          });
+        } else if (sortMode === 'rating_desc') {
+          matches.sort((a, b) => {
+            const ar = typeof (a.company as any).avg_rating === 'number' ? (a.company as any).avg_rating : Number((a.company as any).avg_rating || 0);
+            const br = typeof (b.company as any).avg_rating === 'number' ? (b.company as any).avg_rating : Number((b.company as any).avg_rating || 0);
+            return (br || 0) - (ar || 0);
+          });
+        }
+
+        setFilteredCompanies(matches.map((m) => m.company));
+        setCompaniesWithDistance(matches.map((m) => ({ company: m.company, distance: m.distance })));
+      } catch (err) {
+        console.error('Clinic search error:', err);
+      } finally {
+        setIsSearching(false);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [companies, filteredCompanies, location, effectiveLocation, selectedDistance, sortMode, isLocationActive, sortAllCompaniesByDistance]
+  );
+
+  const refreshSearchResults = useCallback(() => {
+    const q = (searchQuery || '').trim();
+    if (!q) return;
+    if (searchScope === 'clinic') {
+      void searchCompaniesByClinic(searchQuery);
+    } else {
+      void searchCompaniesByService(searchQuery);
+    }
+  }, [searchQuery, searchScope, searchCompaniesByClinic, searchCompaniesByService]);
+
   // Debounce search queries
   useEffect(() => {
-    // Only run search when query is NOT empty
     if (!searchQuery || !searchQuery.trim()) {
       return;
     }
 
     const t = setTimeout(() => {
-      searchCompaniesByService(searchQuery);
+      refreshSearchResults();
     }, 300);
     return () => clearTimeout(t);
-  }, [searchQuery, searchCompaniesByService]);
+  }, [searchQuery, searchScope, refreshSearchResults]);
 
   // If the user selected "Closest" but location was missing, once location becomes available
   // automatically re-run the search so distances are computed and the list is sorted properly.
@@ -563,16 +533,8 @@ export const UserDashboardScreen = () => {
     if (!orig) return;
     if ((searchQuery || '').trim().length === 0) return;
 
-    searchCompaniesByService(searchQuery);
-  }, [effectiveLocation, location, searchCompaniesByService, searchQuery, sortMode]);
-
-  useEffect(() => {
-    if (isSearchExpanded) {
-      // Let the input mount before focusing
-      const t = setTimeout(() => searchInputRef.current?.focus?.(), 50);
-      return () => clearTimeout(t);
-    }
-  }, [isSearchExpanded]);
+    refreshSearchResults();
+  }, [effectiveLocation, location, refreshSearchResults, searchQuery, sortMode]);
 
   /**
    * Fetch route distances when "Sortează după distanță" is active and companies are loaded
@@ -670,7 +632,7 @@ export const UserDashboardScreen = () => {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     clearRouteCache();
-    await Promise.all([fetchCompanies(), fetchUserAppointments()]);
+    await fetchCompanies();
     if (availableNowMode) {
       try {
         const data = await ApiService.getAvailableNow();
@@ -692,119 +654,13 @@ export const UserDashboardScreen = () => {
     navigation.navigate('VetCompanyDetail', { companyId });
   };
 
-  const handleUserCancel = async (appointmentId: number) => {
-    try {
-      const ok = await ApiService.cancelAppointment(appointmentId);
-      if (ok) {
-        Alert.alert('Succes', 'Programarea a fost anulată.');
-        fetchUserAppointments();
-      } else {
-        Alert.alert('Eroare', 'Nu s-a putut anula programarea.');
-      }
-    } catch (err: any) {
-      console.error('Cancel appointment error (user):', err);
-      Alert.alert('Eroare', err.message || 'Nu s-a putut anula programarea.');
-    }
-  };
-
-  const handleUserDelete = async (appointmentId: number) => {
-    // Immediate soft-delete without dialog. Show a Snackbar for feedback and a loading state on the button.
-    try {
-      setDeletingId(appointmentId);
-      const ok = await ApiService.deleteAppointment(appointmentId);
-      if (ok) {
-        setSnackMessage('Appointment removed');
-        setSnackVisible(true);
-        await fetchUserAppointments();
-      } else {
-        setSnackMessage('Could not remove appointment');
-        setSnackVisible(true);
-      }
-    } catch (err: any) {
-      console.error('Remove appointment error (user):', err);
-      setSnackMessage(err?.message || 'Failed to remove appointment');
-      setSnackVisible(true);
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  const openReview = (clinicId: number | null, appointmentId?: number | null) => {
-    if (!clinicId) return;
-    setReviewClinicId(clinicId);
-    setReviewAppointmentId(appointmentId ?? null);
-    setReviewRating(1);
-    setReviewComment('');
-    setReviewCategory('altele');
-    setReviewProfessionalism(1);
-    setReviewEfficiency(1);
-    setReviewFriendliness(1);
-    setReviewVisible(true);
-  };
-
-  const closeReview = () => {
-    setReviewVisible(false);
-    setReviewClinicId(null);
-    setReviewAppointmentId(null);
-    setReviewRating(1);
-    setReviewComment('');
-    setReviewCategory('altele');
-    setReviewProfessionalism(1);
-    setReviewEfficiency(1);
-    setReviewFriendliness(1);
-  };
-
-  const renderStarRow = (label: string, value: number, setValue: (n: number) => void) => (
-    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-      <Text style={{ marginRight: 8, minWidth: 120, fontSize: 14 }}>{label}</Text>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-        {[1, 2, 3, 4, 5].map((i) => (
-          <TouchableOpacity key={i} onPress={() => setValue(i)} style={{ padding: 2 }}>
-            <MaterialCommunityIcons name={i <= value ? 'star' : 'star-outline'} size={26} color={i <= value ? '#f59e0b' : '#d1d5db'} />
-          </TouchableOpacity>
-        ))}
-      </View>
-    </View>
-  );
-
-  const submitReview = async () => {
-    if (!reviewClinicId) return;
-    if (reviewRating < 1 || reviewRating > 5) {
-      setSnackMessage('Rating must be between 1 and 5');
-      setSnackVisible(true);
-      return;
-    }
-    try {
-      setReviewSubmitting(true);
-      const payload = {
-        rating: reviewRating,
-        comment: reviewComment,
-        appointment_id: reviewAppointmentId,
-        category: reviewCategory,
-        professionalism: reviewProfessionalism,
-        efficiency: reviewEfficiency,
-        friendliness: reviewFriendliness,
-      };
-      await vetApi.reviews.create(reviewClinicId, payload as any);
-      setSnackMessage('Mulțumim pentru review!');
-      setSnackVisible(true);
-      try { await fetchMyReviews(); } catch {}
-      closeReview();
-    } catch (err: any) {
-      console.error('Submit review error:', err);
-      setSnackMessage(err?.message || 'Failed to save review');
-      setSnackVisible(true);
-    } finally {
-      setReviewSubmitting(false);
-    }
-  };
-
   /**
    * Handle sort requests coming from the card buttons.
    * dir: 'asc' => sort by matchedService.price_min ascending
    * dir: 'desc' => sort by matchedService.price_max descending
    */
   const handleSortPrice = (dir: 'asc' | 'desc') => {
+    if (searchScope === 'clinic') return;
     const mode = dir === 'asc' ? 'min_asc' : 'max_desc';
     setSortMode(mode);
 
@@ -828,7 +684,9 @@ export const UserDashboardScreen = () => {
 
     const hasSearch = (searchQuery || '').trim().length > 0;
     const listToSort = hasSearch
-      ? (companiesWithDistance.filter((c) => c.matchedService) as Array<{ company: Company; distance?: number; matchedService: any }>)
+      ? (searchScope === 'clinic'
+          ? ([...companiesWithDistance] as Array<{ company: Company; distance?: number; matchedService?: any }>)
+          : (companiesWithDistance.filter((c) => c.matchedService) as Array<{ company: Company; distance?: number; matchedService: any }>))
       : [...companiesWithDistance];
 
     if (listToSort.length === 0) return;
@@ -843,7 +701,7 @@ export const UserDashboardScreen = () => {
     setCompaniesWithDistance(listToSort.map((m) => ({ company: m.company, distance: m.distance, matchedService: (m as any).matchedService })));
 
     if (hasSearch) {
-      searchCompaniesByService(searchQuery);
+      refreshSearchResults();
     }
   };
 
@@ -863,7 +721,9 @@ export const UserDashboardScreen = () => {
       return;
     }
 
-  const matches = companiesWithDistance.filter((c) => c.matchedService) as Array<{ company: Company; distance?: number; matchedService: any }>;
+    const matches = (searchScope === 'clinic'
+      ? [...companiesWithDistance]
+      : companiesWithDistance.filter((c) => c.matchedService)) as Array<{ company: Company; distance?: number; matchedService: any }>;
     if (matches.length === 0) return;
 
     // Compute distance from current user location to each clinic (if possible)
@@ -884,7 +744,7 @@ export const UserDashboardScreen = () => {
     setCompaniesWithDistance(matchesWithDistance);
 
     if ((searchQuery || '').trim().length > 0) {
-      searchCompaniesByService(searchQuery);
+      refreshSearchResults();
     }
   };
 
@@ -923,6 +783,15 @@ export const UserDashboardScreen = () => {
 
   const openMenu = () => setMenuVisible(true);
   const closeMenu = () => setMenuVisible(false);
+
+  const pickSearchScope = (scope: 'clinic' | 'service') => {
+    setScopeMenuVisible(false);
+    setSearchScope(scope);
+    const q = (searchQuery || '').trim();
+    if (!q) return;
+    if (scope === 'clinic') void searchCompaniesByClinic(searchQuery);
+    else void searchCompaniesByService(searchQuery);
+  };
 
   /**
    * Open map with clinics. Uses selected location source:
@@ -986,7 +855,7 @@ export const UserDashboardScreen = () => {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <StatusBar barStyle="dark-content" backgroundColor="#fafaf9" />
+        <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.colors.primary.main} />
           <Text style={styles.loadingText}>Se încarcă clinicile...</Text>
@@ -997,7 +866,7 @@ export const UserDashboardScreen = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fafaf9" />
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
 
       <ScrollView
         style={styles.scrollView}
@@ -1023,47 +892,7 @@ export const UserDashboardScreen = () => {
               <Text style={styles.compactHeaderTitle}>VetFinder</Text>
             </View>
 
-            {/* Right side: search + menu */}
             <View style={styles.headerRight}>
-              <View style={[styles.headerSearchContainer, !isSearchExpanded && styles.headerSearchContainerCollapsed]}>
-                {isSearchExpanded ? (
-                  <TextInput
-                    ref={searchInputRef}
-                    mode="outlined"
-                    placeholder="Caută un serviciu"
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                    style={styles.searchInput}
-                    // No left icon when expanded: keep maximum room for placeholder text
-                    right={
-                      <TextInput.Icon
-                        icon={() => (
-                          <Ionicons
-                            name="close"
-                            size={15}
-                            color="#6b7280"
-                          />
-                        )}
-                        onPress={() => {
-                          setSearchQuery('');
-                          setIsSearchExpanded(false);
-                        }}
-                      />
-                    }
-                  />
-                ) : (
-                  <TouchableOpacity
-                    onPress={() => setIsSearchExpanded(true)}
-                    style={styles.searchIconButton}
-                    activeOpacity={0.8}
-                    accessibilityRole="button"
-                    accessibilityLabel="Search"
-                  >
-                    <Ionicons name="search" size={22} color="#FFFFFF" />
-                  </TouchableOpacity>
-                )}
-              </View>
-
               <View style={styles.sortControls}>
                 <Menu
                   visible={menuVisible}
@@ -1071,7 +900,7 @@ export const UserDashboardScreen = () => {
                   anchor={
                     <TouchableOpacity
                       onPress={openMenu}
-                      style={styles.logoutButton}
+                      style={styles.headerIconButton}
                       activeOpacity={0.7}
                       accessibilityRole="button"
                       accessibilityLabel="Menu"
@@ -1080,6 +909,14 @@ export const UserDashboardScreen = () => {
                     </TouchableOpacity>
                   }
                 >
+                  <Menu.Item
+                    title="Programările mele"
+                    onPress={() => {
+                      closeMenu();
+                      navigation.navigate('MyAppointments');
+                    }}
+                    leadingIcon="calendar-month-outline"
+                  />
                   <Menu.Item
                     title="Setări"
                     onPress={() => {
@@ -1102,218 +939,125 @@ export const UserDashboardScreen = () => {
           </View>
         </LinearGradient>
 
-        {!isServiceSearchActive && (
-        <View style={styles.myAppointmentsSection}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Programările mele</Text>
-            <TouchableOpacity style={styles.viewAllButton} onPress={() => navigation.navigate('MyAppointments')}>
-              <Text style={styles.viewAllButtonText}>Vezi toate</Text>
-              <Ionicons name="chevron-forward" size={16} color={theme.colors.primary.main} />
-            </TouchableOpacity>
+        {/* Zonă hero dedicată căutării (fundal lavandă, bile lăbuțe, bară tip pill ca în mockup) */}
+        <View style={styles.searchHeroSection}>
+          <View style={styles.searchHeroPawDecor} pointerEvents="none">
+            <Ionicons name="paw" size={26} color="rgba(100, 180, 210, 0.35)" style={styles.searchHeroPawDecorIcon} />
+            <Ionicons name="paw" size={22} color="rgba(100, 180, 210, 0.28)" style={styles.searchHeroPawDecorIconAlt} />
+            <Ionicons name="paw" size={24} color="rgba(100, 180, 210, 0.32)" style={styles.searchHeroPawDecorIconRight} />
           </View>
 
-          {/* User appointments: show upcoming or empty state */}
-          {isLoadingAppointments ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={theme.colors.primary.main} />
-            </View>
-          ) : !hasAnyDashboardEligibleAppointments ? (
-            <View style={styles.emptyAppointments}>
-              <Ionicons name="calendar-outline" size={48} color={theme.colors.neutral[400]} />
-              <Text style={styles.emptyAppointmentsText}>Nu există programări viitoare</Text>
-            </View>
-          ) : (
-            <View>
-              {/** Map server appointments to AppointmentCard shape */}
-              {priorityAppointments
-                .slice()
-                .sort((a, b) => new Date(a.appointment_date).getTime() - new Date(b.appointment_date).getTime())
-                .map((a, idx) => {
-                  // Normalize services selection: support multiple shapes returned from backend
-                  let servicesList: Array<any> = [];
-                  if (Array.isArray(a.services) && a.services.length) {
-                    servicesList = a.services;
-                  } else if (Array.isArray(a.selected_services) && a.selected_services.length) {
-                    servicesList = a.selected_services;
-                  } else if (Array.isArray(a.service) && a.service.length) {
-                    servicesList = a.service;
-                  } else if (a.service_name || a.service) {
-                    // single service fallback
-                    servicesList = [
-                      {
-                        service_name: a.service_name || a.service?.service_name || a.service || 'Service',
-                        price_min: a.service?.price_min ?? a.service_price ?? a.price ?? undefined,
-                        price_max: a.service?.price_max ?? a.service_price ?? a.price ?? undefined,
-                        duration_minutes: a.service?.duration_minutes ?? undefined,
-                      },
-                    ];
-                  }
+          <View style={styles.searchHeroContent}>
+            <View style={styles.heroMascotsAndSearch}>
+              <View style={styles.heroMascotsRow} pointerEvents="none">
+                <Image
+                  source={HERO_DOG_IMAGE}
+                  style={styles.heroMascotDog}
+                  resizeMode="contain"
+                  accessibilityLabel="Ilustrație câine"
+                />
+                <Image
+                  source={HERO_CAT_IMAGE}
+                  style={styles.heroMascotCat}
+                  resizeMode="contain"
+                  accessibilityLabel="Ilustrație pisică"
+                />
+              </View>
 
-                  // Compute totals across selected services (sum of mins, sum of maxes, sum of durations)
-                  const totalPriceMin = servicesList.length
-                    ? servicesList.reduce((sum, s) => sum + Number(s?.price_min ?? s?.price ?? 0), 0)
-                    : 0;
-                  const totalPriceMax = servicesList.length
-                    ? servicesList.reduce((sum, s) => sum + Number(s?.price_max ?? s?.price ?? 0), 0)
-                    : 0;
-                  const totalDuration = servicesList.length
-                    ? servicesList.reduce((sum, s) => sum + Number(s?.duration_minutes ?? 0), 0)
-                    : 0;
-
-                  const mapped: AppointmentData & { servicesList?: any[]; total_price_min?: number; total_price_max?: number; total_duration_minutes?: number } = {
-                    id: a.id,
-                    clinicName: a.clinic_name || a.company?.name || 'Clinic',
-                    clinicLogo: a.company?.photo_url || undefined,
-                    clinicAddress: a.clinic_address || a.company?.address || undefined,
-                    date: new Date(a.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-                    time: new Date(a.appointment_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-                    petName: a.pet_name || 'Your pet',
-                    service: a.service_name || a.service?.service_name || 'Service',
-                    status: a.status,
-                    price: a.service_price || a.service?.price_min,
-                    servicesList,
-                    total_price_min: totalPriceMin,
-                    total_price_max: totalPriceMax,
-                    total_duration_minutes: totalDuration,
-                  };
-
-                  // Resolve clinic/company id using multiple possible shapes
-                  const clinicId = a.company?.id ?? a.company_id ?? a.clinic_id ?? null;
-
-                  // Determine if the appointment is in the future; show upcoming variant for future appointments
-                  const isFuture = new Date(a.appointment_date).getTime() > Date.now();
-                  const variant = isFuture ? 'upcoming' : 'past';
-
-                  const isExpanded = expandedAppointments.includes(a.id);
-
-                  const statusColor = (s: string) => {
-                    switch (s) {
-                      case 'confirmed':
-                        // show confirmed as green
-                        return theme.colors.success.main;
-                      case 'pending':
-                        return theme.colors.warning.main;
-                      case 'cancelled':
-                        return theme.colors.error.main;
-                      case 'completed':
-                        // show completed as blue/info
-                        return theme.colors.info.main;
-                      default:
-                        return theme.colors.neutral[600];
-                    }
-                  };
-
-                  return (
-                    <View key={a.id} style={styles.appRowContainer}>
-                      <TouchableOpacity onPress={() => toggleExpand(a.id)} activeOpacity={0.8} style={styles.appRow}>
-                        <View style={styles.appRowLeft}>
-                          <Text style={styles.clinicNameSmall}>{mapped.clinicName}</Text>
-                          <Text style={styles.dateTimeText}>{mapped.date} • {mapped.time}</Text>
-                        </View>
-
-                        <View style={styles.appRowRight}>
-                          {String(a?.status || '').toLowerCase() === 'completed' && (() => {
-                            const hasReviewed = myReviews.some((r) => (r?.appointment_id ?? (r as any)?.appointment_id) === a.id);
-                            if (hasReviewed) return null;
-                            return (
-                              <TouchableOpacity
-                                onPress={() => openReview(clinicId, a.id)}
-                                style={styles.reviewButton}
-                                activeOpacity={0.8}
-                              >
-                                <MaterialCommunityIcons name="star-outline" size={16} color={theme.colors.primary.main} />
-                                <Text style={styles.reviewButtonText}>Review</Text>
-                              </TouchableOpacity>
-                            );
-                          })()}
-                          <View style={[styles.statusBadge, { borderColor: statusColor(mapped.status) }]}>
-                            <Text style={[styles.statusBadgeText, { color: statusColor(mapped.status) }]}>{mapped.status.charAt(0).toUpperCase() + mapped.status.slice(1)}</Text>
-                          </View>
-                          <TouchableOpacity onPress={() => toggleExpand(a.id)} style={styles.expandButton}>
-                            <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={20} color={theme.colors.neutral[700]} />
+              <View style={styles.heroSearchGroupCard}>
+                <View style={styles.heroSearchInner}>
+                  <View style={styles.heroSearchRow}>
+                    <View style={styles.heroLeftCluster}>
+                      <View style={styles.heroPawCircle}>
+                        <MaterialCommunityIcons name="paw" size={22} color="#FFFFFF" />
+                      </View>
+                      <Menu
+                        visible={scopeMenuVisible}
+                        onDismiss={() => setScopeMenuVisible(false)}
+                        anchor={
+                          <TouchableOpacity
+                            onPress={() => setScopeMenuVisible(true)}
+                            style={styles.heroScopeTrigger}
+                            activeOpacity={0.85}
+                            accessibilityRole="button"
+                            accessibilityLabel="Tip căutare: clinică sau serviciu"
+                          >
+                            <Text style={styles.heroScopeTriggerText} numberOfLines={1}>
+                              {searchScope === 'clinic' ? 'Clinică' : 'Serviciu'}
+                            </Text>
+                            <Ionicons name="chevron-down" size={17} color="#475569" />
                           </TouchableOpacity>
-                        </View>
-                      </TouchableOpacity>
+                        }
+                      >
+                        <Menu.Item
+                          title="Clinică"
+                          onPress={() => pickSearchScope('clinic')}
+                          leadingIcon="hospital-building"
+                        />
+                        <Menu.Item
+                          title="Serviciu"
+                          onPress={() => pickSearchScope('service')}
+                          leadingIcon="stethoscope"
+                        />
+                      </Menu>
+                    </View>
 
-                      {isExpanded && (
-                        <View style={styles.appDetails}>
-                          {/* Services list */}
-                          {mapped.servicesList && mapped.servicesList.length > 0 ? (
-                            <View>
-                              <Text style={[styles.detailText, { fontWeight: '700' }]}>Services:</Text>
-                              {mapped.servicesList.map((s, si) => {
-                                const priceMin = s?.price_min ?? s?.price ?? 0;
-                                const priceMax = s?.price_max ?? s?.price ?? 0;
-                                const duration = s?.duration_minutes ?? 0;
-                                const hasPrice = !!(s?.price_min || s?.price_max || s?.price);
-                                const priceText = hasPrice
-                                  ? (s?.price_min != null && s?.price_max != null
-                                      ? formatPriceRange(s.price_min, s.price_max)
-                                      : formatPriceRange(s.price ?? s.price_min ?? s.price_max, null))
-                                  : '0 lei';
+                    <View style={styles.heroVsep} />
 
-                                return (
-                                  <Text key={si} style={styles.detailText}>
-                                    {translateSpecializationName(s.service_name || s.name || '') || 'Serviciu'} — {priceText}{' '}
-                                    • {duration ? `${duration} min` : '0 min'}
-                                  </Text>
-                                );
-                              })}
-
-                              {/* Totals: sum of mins, sum of maxes, sum of durations (fallback 0) */}
-                              <Text style={[styles.detailText, { marginTop: theme.spacing.sm }]}>
-                                <Text style={{ fontWeight: '700' }}>Price:</Text>{' '}
-                                {typeof mapped.total_price_min === 'number' && typeof mapped.total_price_max === 'number'
-                                  ? formatPriceRange(mapped.total_price_min, mapped.total_price_max)
-                                  : '0 lei'}
-                              </Text>
-
-                              <Text style={styles.detailText}>
-                                <Text style={{ fontWeight: '700' }}>Duration:</Text>{' '}
-                                {typeof mapped.total_duration_minutes === 'number'
-                                  ? `${mapped.total_duration_minutes} min`
-                                  : `0 min`}
-                              </Text>
-                            </View>
-                          ) : (
-                            <>
-                              <Text style={styles.detailText}><Text style={{ fontWeight: '700' }}>Service:</Text> {mapped.service}</Text>
-                              <Text style={styles.detailText}><Text style={{ fontWeight: '700' }}>Price:</Text> {mapped.price ? formatPriceRange(mapped.price, null) : '0 lei'}</Text>
-                              <Text style={styles.detailText}><Text style={{ fontWeight: '700' }}>Duration:</Text> {a.service?.duration_minutes ? `${a.service.duration_minutes} min` : '0 min'}</Text>
-                            </>
-                          )}
-
-                          {(mapped.status === 'confirmed' || mapped.status === 'pending') && (
-                            <View style={styles.detailsActions}>
-                              <Button mode="outlined" onPress={() => handleUserCancel(a.id)} textColor={theme.colors.error.main} style={styles.cancelButton}>
-                                Cancel
-                              </Button>
-                            </View>
-                          )}
-                          {mapped.status === 'cancelled' && (
-                            <View style={styles.detailsActions}>
-                              <Button
-                                mode="outlined"
-                                onPress={() => handleUserDelete(a.id)}
-                                loading={deletingId === a.id}
-                                disabled={deletingId !== null && deletingId !== a.id}
-                                textColor={theme.colors.error.main}
-                                style={styles.cancelButton}
-                                icon={() => <Ionicons name="trash-outline" size={16} color={theme.colors.error.main} />}
-                              >
-                                Delete
-                              </Button>
-                            </View>
-                          )}
-                        </View>
+                    <View style={styles.heroSearchFieldWrap}>
+                      <RNTextInput
+                        style={styles.heroSearchInput}
+                        placeholder={
+                          searchScope === 'clinic'
+                            ? 'Nume clinică, oraș sau adresă…'
+                            : 'Ex.: consult, vaccin...'
+                        }
+                        placeholderTextColor="#94a3b8"
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                        returnKeyType="search"
+                        onSubmitEditing={refreshSearchResults}
+                        accessibilityLabel="Câmp căutare"
+                      />
+                      {(searchQuery || '').trim().length > 0 && (
+                        <TouchableOpacity
+                          onPress={() => {
+                            setSearchQuery('');
+                            setSortMode('none');
+                            setFilteredCompanies(companies);
+                            setCompaniesWithDistance(companies.map((c) => ({ company })));
+                          }}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          accessibilityRole="button"
+                          accessibilityLabel="Șterge căutarea"
+                        >
+                          <Ionicons name="close-circle" size={22} color="#94a3b8" />
+                        </TouchableOpacity>
                       )}
                     </View>
-                  );
-                })}
+
+                    <TouchableOpacity
+                      style={styles.heroSearchCta}
+                      onPress={refreshSearchResults}
+                      activeOpacity={0.88}
+                      accessibilityRole="button"
+                      accessibilityLabel="Caută"
+                    >
+                      {isSearching ? (
+                        <ActivityIndicator size="small" color="#1e293b" />
+                      ) : (
+                        <>
+                          <Ionicons name="search" size={20} color="#1e293b" />
+                          <Text style={styles.heroSearchCtaText}>Caută</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
             </View>
-          )}
-  </View>
-  )}
+          </View>
+        </View>
 
         {/* Find Clinics Section */}
         {!isServiceSearchActive && (
@@ -1338,8 +1082,6 @@ export const UserDashboardScreen = () => {
                 )}
               </TouchableOpacity>
             </View>
-
-            {/* Search moved to top bar */}
 
             {/* Location Filter Banner */}
             <View style={styles.filterCard}>
@@ -1444,7 +1186,7 @@ export const UserDashboardScreen = () => {
                     onPress={() => {
                       setSortMode('none');
                       if ((searchQuery || '').trim().length > 0) {
-                        searchCompaniesByService(searchQuery);
+                        refreshSearchResults();
                       } else {
                         setFilteredCompanies(companies);
                         setCompaniesWithDistance(companies.map((c) => ({ company: c })));
@@ -1536,19 +1278,23 @@ export const UserDashboardScreen = () => {
               <View style={styles.resultsSortSection}>
                 <Text style={styles.resultsSortLabel}>Sortează după:</Text>
                 <View style={styles.resultsSortBar}>
-                  <TouchableOpacity
-                    onPress={() => handleSortPrice('asc')}
-                    style={[styles.sortChip, sortMode === 'min_asc' && styles.sortChipActive]}
-                  >
-                    <Text style={[styles.sortChipText, sortMode === 'min_asc' && { color: '#ffffff' }]}>Price ↑</Text>
-                  </TouchableOpacity>
+                  {searchScope === 'service' && (
+                    <>
+                      <TouchableOpacity
+                        onPress={() => handleSortPrice('asc')}
+                        style={[styles.sortChip, sortMode === 'min_asc' && styles.sortChipActive]}
+                      >
+                        <Text style={[styles.sortChipText, sortMode === 'min_asc' && { color: '#ffffff' }]}>Preț ↑</Text>
+                      </TouchableOpacity>
 
-                  <TouchableOpacity
-                    onPress={() => handleSortPrice('desc')}
-                    style={[styles.sortChip, sortMode === 'max_desc' && styles.sortChipActive]}
-                  >
-                    <Text style={[styles.sortChipText, sortMode === 'max_desc' && { color: '#ffffff' }]}>Price ↓</Text>
-                  </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleSortPrice('desc')}
+                        style={[styles.sortChip, sortMode === 'max_desc' && styles.sortChipActive]}
+                      >
+                        <Text style={[styles.sortChipText, sortMode === 'max_desc' && { color: '#ffffff' }]}>Preț ↓</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
 
                   <TouchableOpacity
                     onPress={handleSortRating}
@@ -1762,9 +1508,9 @@ export const UserDashboardScreen = () => {
                     style={{
                       padding: 12,
                       borderRadius: 12,
-                      backgroundColor: theme.colors.neutral[50],
+                      backgroundColor: theme.colors.surface.cream,
                       borderWidth: 1,
-                      borderColor: theme.colors.neutral[200],
+                      borderColor: theme.colors.surface.border,
                     }}
                   >
                     <Text style={{ fontWeight: '700', fontSize: 16, color: theme.colors.neutral[900] }}>
@@ -1789,46 +1535,6 @@ export const UserDashboardScreen = () => {
           </Dialog.Actions>
         </Dialog>
       </Portal>
-      {/* Review dialog */}
-      <Portal>
-        <Dialog visible={reviewVisible} onDismiss={closeReview}>
-          <Dialog.Title>Lasă un review</Dialog.Title>
-          <Dialog.Content>
-            <Text style={{ marginBottom: 6, fontSize: 14, fontWeight: '600' }}>Categorie</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-              {(['pisica', 'caine', 'pasare', 'altele'] as const).map((cat) => (
-                <Chip
-                  key={cat}
-                  selected={reviewCategory === cat}
-                  onPress={() => setReviewCategory(cat)}
-                  style={{ marginRight: 0 }}
-                >
-                  {cat === 'pisica' ? 'Pisică' : cat === 'caine' ? 'Câine' : cat === 'pasare' ? 'Pasăre' : 'Altele'}
-                </Chip>
-              ))}
-            </View>
-
-            {renderStarRow('Profesionalitate', reviewProfessionalism, setReviewProfessionalism)}
-            {renderStarRow('Eficiență', reviewEfficiency, setReviewEfficiency)}
-            {renderStarRow('Amabilitate', reviewFriendliness, setReviewFriendliness)}
-            {renderStarRow('Overall experience', reviewRating, setReviewRating)}
-
-            <Text style={{ marginBottom: 6, marginTop: 8, fontSize: 14, fontWeight: '600' }}>Spune-ne experiența ta:</Text>
-            <TextInput
-              mode="outlined"
-              placeholder="Comentariu (opțional)"
-              value={reviewComment}
-              onChangeText={setReviewComment}
-              multiline
-              numberOfLines={4}
-            />
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={closeReview} mode="text">Anulare</Button>
-            <Button onPress={submitReview} loading={reviewSubmitting} mode="contained">Trimite</Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
       {/* Feedback Snackbar (web + native) */}
       <Snackbar
         visible={snackVisible}
@@ -1845,7 +1551,7 @@ export const UserDashboardScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.neutral[100],  // Warm beige instead of purple tint
+    backgroundColor: theme.colors.surface.background,
   },
   scrollView: {
     flex: 1,
@@ -1879,18 +1585,6 @@ const styles = StyleSheet.create({
   titleTextContainer: {
     flex: 1,
   },
-  searchInput: {
-    flex: 1,
-    minWidth: 120,  // Responsive minimum width
-    height: 38,
-    backgroundColor: theme.colors.neutral[50],
-    borderRadius: theme.borderRadius.md,
-    marginRight: 0,
-    paddingHorizontal: 0,
-    fontSize: 13,
-    paddingVertical: 0,
-    elevation: 2,
-  },
   titleMain: {
     fontSize: 24,
     fontWeight: '300',
@@ -1900,14 +1594,6 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '700',
     color: theme.colors.primary.main,
-  },
-  logoutButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   filterCard: {
     backgroundColor: '#ffffff',
@@ -2158,8 +1844,8 @@ const styles = StyleSheet.create({
   // Compact Header Styles
   compactHeader: {
     paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.lg,
-    marginBottom: theme.spacing.md,
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.xl,
   },
   compactHeaderContent: {
     flexDirection: 'row',
@@ -2170,17 +1856,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  headerSearchContainer: {
-    flexShrink: 1,
-    width: Math.min(210, Math.max(160, SCREEN_WIDTH * 0.48)),
-    marginLeft: 6,
-    marginRight: 6,
-  },
-  headerSearchContainerCollapsed: {
-    width: 40,
-    marginRight: 8,
-  },
-  searchIconButton: {
+  headerIconButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -2198,139 +1874,166 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
   },
-  // My Appointments Section Styles
-  myAppointmentsSection: {
+  /** Hero dedicat căutării — lavandă foarte pal, ca în mockup */
+  searchHeroSection: {
+    position: 'relative',
+    backgroundColor: '#f3f0fa',
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing['2xl'],
     paddingHorizontal: theme.spacing.lg,
-    marginBottom: theme.spacing.xl,
+    marginBottom: theme.spacing.sm,
+    overflow: 'visible',
   },
-  sectionHeader: {
+  searchHeroPawDecor: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 32,
+    pointerEvents: 'none',
+  },
+  searchHeroPawDecorIcon: {
+    transform: [{ rotate: '-18deg' }],
+  },
+  searchHeroPawDecorIconAlt: {
+    marginTop: 8,
+    transform: [{ rotate: '12deg' }],
+  },
+  searchHeroPawDecorIconRight: {
+    transform: [{ rotate: '22deg' }],
+  },
+  searchHeroContent: {
+    position: 'relative',
+    zIndex: 2,
+    alignItems: 'center',
+    maxWidth: 720,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  /** Mascote în fundalul lavandă, chenarul alb doar pentru căutare */
+  heroMascotsAndSearch: {
+    width: '100%',
+    alignItems: 'stretch',
+    position: 'relative',
+  },
+  /** Doar bara de căutare (mascotele sunt în afara acestui chenar) */
+  heroSearchGroupCard: {
+    width: '100%',
+    backgroundColor: '#ffffff',
+    borderRadius: 32,
+    borderWidth: 2,
+    borderColor: '#9dcfe8',
+    paddingHorizontal: 5,
+    paddingVertical: 5,
+    overflow: 'visible',
+    zIndex: 1,
+    ...theme.shadows.md,
+    shadowColor: '#6ba2c4',
+  },
+  heroMascotsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: Math.min(10, SCREEN_WIDTH * 0.024),
+    /* Trage pill-ul sub lăbuțe — mascotele rămân deasupra chenarului */
+    marginBottom: -46,
+    zIndex: 3,
+    paddingHorizontal: 2,
+  },
+  heroMascotDog: {
+    width: HERO_MASCOT_DISPLAY_WIDTH,
+    aspectRatio: HERO_DOG_PX.w / HERO_DOG_PX.h,
+    transform: [{ translateY: 12 }],
+  },
+  heroMascotCat: {
+    width: HERO_CAT_DISPLAY_WIDTH,
+    aspectRatio: HERO_CAT_PX.w / HERO_CAT_PX.h,
+    transform: [{ translateY: 28 }],
+  },
+  heroSearchInner: {
+    zIndex: 1,
+    paddingVertical: 5,
+  },
+  heroSearchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: theme.spacing.md,
+    minHeight: 52,
+  },
+  heroLeftCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingLeft: 2,
+    flexShrink: 0,
+  },
+  heroPawCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#6bb8d6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heroScopeTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    maxWidth: SCREEN_WIDTH * 0.28,
+    minWidth: 84,
+  },
+  heroScopeTriggerText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#334155',
+    flexShrink: 1,
+  },
+  heroVsep: {
+    width: StyleSheet.hairlineWidth * 2,
+    alignSelf: 'stretch',
+    backgroundColor: '#cbd5e1',
+    marginVertical: 10,
+    minHeight: 28,
+  },
+  heroSearchFieldWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    minWidth: 0,
+  },
+  heroSearchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#0f172a',
+    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
+    paddingHorizontal: 6,
+    minWidth: 0,
+  },
+  heroSearchCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 18,
+    minHeight: 46,
+    backgroundColor: '#f5d547',
+    borderRadius: 28,
+    marginLeft: 4,
+    flexShrink: 0,
+  },
+  heroSearchCtaText: {
+    color: '#1e293b',
+    fontWeight: '800',
+    fontSize: 15,
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: '700',
     color: theme.colors.neutral[700],
-  },
-  viewAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  viewAllButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.primary.main,
-  },
-  emptyAppointments: {
-    backgroundColor: theme.colors.neutral[50],
-    borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing['2xl'],
-    alignItems: 'center',
-    gap: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.neutral[200],
-  },
-  emptyAppointmentsText: {
-    fontSize: 15,
-    color: theme.colors.neutral[600],
-    textAlign: 'center',
-  },
-  bookNowButton: {
-    marginTop: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.xl,
-    paddingVertical: theme.spacing.md,
-    backgroundColor: theme.colors.accent.main,
-    borderRadius: theme.borderRadius.md,
-  },
-  bookNowButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  /* Appointment compact list styles */
-  appRowContainer: {
-    backgroundColor: theme.colors.neutral[50],
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-    borderWidth: 1,
-    borderColor: theme.colors.neutral[200],
-  },
-  appRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  appRowLeft: {
-    flex: 1,
-  },
-  clinicNameSmall: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.colors.neutral[900],
-  },
-  dateTimeText: {
-    fontSize: 13,
-    color: theme.colors.neutral[600],
-    marginTop: theme.spacing.xs,
-  },
-  appRowRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: theme.spacing.md,
-  },
-  reviewButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginRight: theme.spacing.sm,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: 'transparent',
-  },
-  reviewButtonText: {
-    fontSize: 13,
-    color: theme.colors.primary.main,
-    fontWeight: '700',
-    marginLeft: 6,
-  },
-  statusBadge: {
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  statusBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  expandButton: {
-    marginLeft: theme.spacing.sm,
-  },
-  appDetails: {
-    marginTop: theme.spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.neutral[200],
-    paddingTop: theme.spacing.sm,
-  },
-  detailText: {
-    fontSize: 14,
-    color: theme.colors.neutral[700],
-    marginBottom: theme.spacing.xs,
-  },
-  detailsActions: {
-    marginTop: theme.spacing.sm,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-  },
-  cancelButton: {
-    borderColor: theme.colors.error.main,
-    borderWidth: 1,
-    backgroundColor: 'transparent',
   },
   // Find Clinics Section Styles
   findClinicsSection: {

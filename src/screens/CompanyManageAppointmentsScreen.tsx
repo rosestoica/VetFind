@@ -118,11 +118,11 @@ export const CompanyManageAppointmentsScreen = () => {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: theme.colors.neutral[100],
+    backgroundColor: theme.colors.surface.background,
   },
   container: {
     flex: 1,
-    backgroundColor: theme.colors.neutral[100],
+    backgroundColor: theme.colors.surface.background,
   },
   header: {
     flexDirection: 'row',
@@ -131,8 +131,8 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
     paddingHorizontal: theme.spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.neutral[200],
-    backgroundColor: theme.colors.neutral[50],
+    borderBottomColor: theme.colors.surface.border,
+    backgroundColor: theme.colors.surface.background,
     minHeight: 52,
   },
   headerBack: {
@@ -183,14 +183,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: theme.spacing.sm,
     paddingHorizontal: theme.spacing.lg,
-    backgroundColor: theme.colors.neutral[100],
+    backgroundColor: theme.colors.surface.cream,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.neutral[200],
+    borderBottomColor: theme.colors.surface.border,
   },
   calendarSegmentTrack: {
     flexDirection: 'row',
     borderRadius: theme.borderRadius.md,
-    backgroundColor: theme.colors.neutral[200],
+    backgroundColor: theme.colors.surface.segmentTrack,
     padding: 2,
     maxWidth: 260,
     width: '100%',

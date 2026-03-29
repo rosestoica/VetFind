@@ -237,7 +237,7 @@ export const ManagePhotosScreen = () => {
 const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
-    backgroundColor: theme.colors.neutral[50],
+    backgroundColor: theme.colors.surface.background,
   },
   container: {
     flex: 1,
@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: theme.colors.neutral[50],
+    backgroundColor: theme.colors.surface.background,
   },
   loadingText: {
     marginTop: 12,
@@ -280,10 +280,10 @@ const styles = StyleSheet.create({
   logoSection: {
     marginBottom: 24,
     padding: 16,
-    backgroundColor: theme.colors.neutral[50],
+    backgroundColor: theme.colors.surface.cream,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.colors.neutral[200],
+    borderColor: theme.colors.surface.border,
   },
   sectionTitle: {
     fontWeight: '700',
@@ -318,10 +318,10 @@ const styles = StyleSheet.create({
   photosSection: {
     marginBottom: 24,
     padding: 16,
-    backgroundColor: theme.colors.neutral[50],
+    backgroundColor: theme.colors.surface.cream,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.colors.neutral[200],
+    borderColor: theme.colors.surface.border,
   },
   tips: {
     marginTop: 32,

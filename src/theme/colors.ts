@@ -2,7 +2,7 @@
  * VetFinder — paletă de brand (inspirată layout curat / contrast puternic, ex. Agendrix)
  *
  * Culori din paletă:
- * - #e5e1de fundal cald · #096e77 teal închis · #5b7d7e gri-sidef verzui
+ * - fundal pagină alb / panouri crem foarte deschis (surface.cream) · #096e77 teal · #5b7d7e gri-sidef
  * - #a57269 rose praf (erori / destructive) · #20c571 verde accent
  * - #6b6ef7 periwinkle (info / link-uri secundare) · #40251f maro închis
  * - #2a969d turcoaz · #33343c text închis
@@ -27,9 +27,9 @@ export const primary = {
   900: '#043c42',
 } as const;
 
-/** Neutrale: fundal #e5e1de, text #33343c, gri verzui #5b7d7e */
+/** Neutrale: doar text / iconițe; fundaluri → colors.surface (alb / crem / border) */
 export const neutral = {
-  50: '#e5e1de',
+  50: '#ffffff',
   100: '#d8d4d0',
   200: '#c5c1bd',
   300: '#a9a5a1',
@@ -156,8 +156,15 @@ export const colors = {
     secondary: neutral[600],
   },
   surface: {
+    /** Fundal principal ecrane / app */
     card: common.white,
-    muted: neutral[100],
-    background: neutral[50],
+    background: common.white,
+    /** Crem aproape alb — carduri, câmpuri, panouri (fără gri-bej neutru) */
+    cream: '#faf9f6',
+    /** Linii / borduri subtile, calde */
+    border: '#ebe8e4',
+    muted: '#faf9f6',
+    /** Fundal discret pentru comutatoare/segmente (fără gri neutru) */
+    segmentTrack: '#e8e5e0',
   },
 } as const;

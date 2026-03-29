@@ -21,7 +21,7 @@ export interface BackHeaderProps {
 export const BackHeader: React.FC<BackHeaderProps> = ({
   title,
   onBack,
-  backgroundColor = theme.colors.neutral[50],
+  backgroundColor = theme.colors.white,
   iconColor = theme.colors.neutral[800],
   titleColor = theme.colors.neutral[900],
   style,

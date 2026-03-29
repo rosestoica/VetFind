@@ -182,7 +182,7 @@ const VetCompanyCardComponent = ({ company, distance, routeDistance, matchedServ
         activeOpacity={1}
       >
         <Card style={[styles.card, {
-          backgroundColor: colors.neutral[50],
+          backgroundColor: colors.surface.cream,
           borderRadius: borderRadius.lg,
         }]}>
           {/* Photo Section */}

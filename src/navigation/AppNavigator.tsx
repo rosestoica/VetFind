@@ -43,8 +43,12 @@ const AppNavigator: React.FC = () => {
     const body = document.body;
     const prevHtmlOverflow = html.style.overflow;
     const prevBodyOverflow = body.style.overflow;
+    const prevHtmlBg = html.style.backgroundColor;
+    const prevBodyBg = body.style.backgroundColor;
     html.style.overflow = 'auto';
     body.style.overflow = 'auto';
+    html.style.backgroundColor = '#ffffff';
+    body.style.backgroundColor = '#ffffff';
 
     // Disable any blocking aria-hidden overlays on mount
     const restoreOverlays = disableBlockingAriaHiddenOverlays();
@@ -53,6 +57,8 @@ const AppNavigator: React.FC = () => {
       try {
         html.style.overflow = prevHtmlOverflow;
         body.style.overflow = prevBodyOverflow;
+        html.style.backgroundColor = prevHtmlBg;
+        body.style.backgroundColor = prevBodyBg;
       } catch (e) {
         // ignore
       }
@@ -221,7 +227,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FFFFFF',
   },
 });
 

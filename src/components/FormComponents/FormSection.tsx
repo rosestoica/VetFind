@@ -5,7 +5,7 @@
  * Part of Phase 3 redesign for card-based form layouts.
  *
  * Features:
- * - Warm neutral card backgrounds (#fafaf9)
+ * - Card backgrounds (typically white / surface.card)
  * - Optional icon and subtitle
  * - Consistent padding and spacing
  * - Responsive behavior
@@ -67,7 +67,7 @@ export const FormSection = ({
         styles.container,
         styleHelpers.card('elevated'),
         {
-          backgroundColor: backgroundColor || colors.neutral[50],
+          backgroundColor: backgroundColor || colors.surface.card,
           padding: spacing.lg,
           marginBottom: spacing.lg,
         },

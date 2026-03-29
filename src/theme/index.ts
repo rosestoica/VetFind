@@ -12,7 +12,7 @@
  *
  * const styles = StyleSheet.create({
  *   card: {
- *     backgroundColor: theme.colors.neutral[50],
+ *     backgroundColor: theme.colors.surface.background,
  *     padding: theme.spacing.lg,
  *     borderRadius: theme.borderRadius.lg,
  *     ...theme.shadows.md,
@@ -34,8 +34,8 @@ export const gradients = {
   bannerDuo: [colors.primary.main, colors.primary[400]] as [string, string],
   /** CTA / carduri: teal închis → verde accent */
   brandDuo: [colors.primary[800], colors.accent.main] as [string, string],
-  /** Fundal auth — ton #e5e1de + tentă teal foarte fină */
-  surface: [colors.neutral[50], colors.primary[50], colors.neutral[50]] as [string, string, string],
+  /** Fundal auth — alb */
+  surface: [colors.white, colors.white, colors.white] as [string, string, string],
   /** Buton principal */
   cta: [colors.primary[700], colors.accent[500]] as [string, string],
   /** Logo */
@@ -65,13 +65,13 @@ export const paperTheme = {
     onErrorContainer: colors.error[900],
     background: colors.surface.background,
     surface: colors.surface.card,
-    surfaceVariant: colors.neutral[100],
+    surfaceVariant: colors.surface.cream,
     onSurface: colors.neutral[900],
     onSurfaceVariant: colors.neutral[600],
-    outline: colors.neutral[300],
-    outlineVariant: colors.neutral[200],
+    outline: colors.surface.border,
+    outlineVariant: colors.surface.border,
     inverseSurface: colors.neutral[800],
-    inverseOnSurface: colors.neutral[50],
+    inverseOnSurface: colors.white,
     shadow: colors.neutral[900],
     scrim: 'rgba(0,0,0,0.4)',
     elevation: MD3LightTheme.colors.elevation,
@@ -270,7 +270,7 @@ export const styleHelpers = {
   card: (variant: 'default' | 'elevated' | 'outlined' | 'primary' = 'default') => {
     const base = {
       borderRadius: theme.borderRadius.lg,
-      backgroundColor: theme.colors.neutral[50],  // Warm cream instead of white
+      backgroundColor: theme.colors.surface.card,
       overflow: 'hidden' as const,
     };
 
@@ -284,7 +284,7 @@ export const styleHelpers = {
         return {
           ...base,
           borderWidth: 1,
-          borderColor: theme.colors.neutral[200],  // Warm beige border
+          borderColor: theme.colors.surface.border,
         };
       case 'primary':
         return {
@@ -328,7 +328,7 @@ export const styleHelpers = {
       case 'secondary':
         return {
           ...base,
-          backgroundColor: theme.colors.neutral[100],  // Warm beige
+          backgroundColor: theme.colors.surface.cream,
         };
       case 'outlined':
         return {
@@ -354,11 +354,11 @@ export const styleHelpers = {
   input: (state: 'default' | 'focused' | 'error' | 'success' | 'disabled' = 'default') => {
     const base = {
       borderRadius: theme.borderRadius.md,
-      backgroundColor: theme.colors.neutral[50],  // Warm cream background
+      backgroundColor: theme.colors.surface.cream,
       paddingVertical: theme.spacing.md,
       paddingHorizontal: theme.spacing.lg,
       borderWidth: 1,
-      borderColor: theme.colors.neutral[300],  // Warm beige border
+      borderColor: theme.colors.surface.border,
       fontSize: 16,
       color: theme.colors.neutral[900],  // Warm black text
     };
@@ -386,8 +386,8 @@ export const styleHelpers = {
       case 'disabled':
         return {
           ...base,
-          backgroundColor: theme.colors.neutral[100],  // Light warm beige
-          borderColor: theme.colors.neutral[200],  // Soft beige border
+          backgroundColor: theme.colors.surface.cream,
+          borderColor: theme.colors.surface.border,
           color: theme.colors.neutral[400],  // Warm gray text
         };
       default:
@@ -416,7 +416,7 @@ export const styleHelpers = {
       error: { bg: theme.colors.error.main, text: theme.colors.white },
       warning: { bg: theme.colors.warning.main, text: theme.colors.white },
       info: { bg: theme.colors.info.main, text: theme.colors.white },
-      neutral: { bg: theme.colors.neutral[200], text: theme.colors.neutral[700] },  // Warm beige
+      neutral: { bg: theme.colors.surface.cream, text: theme.colors.neutral[700] },
     };
 
     const colors = colorMap[variant];
@@ -449,7 +449,7 @@ export const styleHelpers = {
       error: { bg: theme.colors.error[100], text: theme.colors.error[700], border: theme.colors.error[300] },
       warning: { bg: theme.colors.warning[100], text: theme.colors.warning[700], border: theme.colors.warning[300] },
       info: { bg: theme.colors.info[100], text: theme.colors.info[700], border: theme.colors.info[300] },
-      neutral: { bg: theme.colors.neutral[100], text: theme.colors.neutral[700], border: theme.colors.neutral[300] },  // Warm beige
+      neutral: { bg: theme.colors.surface.cream, text: theme.colors.neutral[700], border: theme.colors.surface.border },
     };
 
     const colors = colorMap[variant];
@@ -471,13 +471,13 @@ export const styleHelpers = {
     if (variant === 'horizontal') {
       return {
         height: thickness,
-        backgroundColor: theme.colors.neutral[200],  // Warm beige
+        backgroundColor: theme.colors.surface.border,
         width: '100%' as const,
       };
     }
     return {
       width: thickness,
-      backgroundColor: theme.colors.neutral[200],  // Warm beige
+      backgroundColor: theme.colors.surface.border,
       height: '100%' as const,
     };
   },

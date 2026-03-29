@@ -122,11 +122,11 @@ export const StatCard = ({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: theme.colors.neutral[50],
+    backgroundColor: theme.colors.surface.cream,
     borderRadius: theme.borderRadius.md,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: theme.colors.neutral[200],
+    borderColor: theme.colors.surface.border,
     ...theme.shadows.sm,
     justifyContent: 'center',
   },
@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
     borderRadius: theme.borderRadius.md,
-    backgroundColor: theme.colors.neutral[100],
+    backgroundColor: theme.colors.surface.cream,
   },
   trendValue: {
     ...theme.typography.caption,

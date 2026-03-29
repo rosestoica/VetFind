@@ -13,7 +13,7 @@
  *
  *   return (
  *     <View style={{
- *       backgroundColor: colors.neutral[50],
+ *       backgroundColor: colors.surface.background,
  *       padding: responsive.padding(),
  *       ...typography.h1
  *     }}>

@@ -54,7 +54,7 @@ export const LoadingState = ({ type = 'card', count = 1 }: LoadingStateProps) =>
    */
   const renderSkeleton = () => {
     const skeletonStyle = {
-      backgroundColor: colors.neutral[200], // Warm beige #e7e5e4
+      backgroundColor: colors.surface.segmentTrack,
       opacity,
     };
 

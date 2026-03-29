@@ -102,8 +102,8 @@ export const AppointmentCard = ({
     },
     cancelled: {
       color: theme.colors.neutral[600],
-      bg: theme.colors.neutral[100],
-      border: theme.colors.neutral[300],
+      bg: theme.colors.surface.cream,
+      border: theme.colors.surface.border,
       icon: 'close-circle-outline' as const,
       label: 'Anulat',
     },
@@ -308,10 +308,10 @@ export const AppointmentCard = ({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: theme.colors.neutral[50],
+    backgroundColor: theme.colors.surface.cream,
     borderRadius: theme.borderRadius.lg,
     borderWidth: 1,
-    borderColor: theme.colors.neutral[200],
+    borderColor: theme.colors.surface.border,
     overflow: 'hidden',
   },
   upcomingCard: {
@@ -338,13 +338,13 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     gap: theme.spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.neutral[200],
+    borderBottomColor: theme.colors.surface.border,
   },
   clinicLogo: {
     width: 60,
     height: 60,
     borderRadius: theme.borderRadius.md,
-    backgroundColor: theme.colors.neutral[100],
+    backgroundColor: theme.colors.surface.cream,
   },
   clinicLogoPlaceholder: {
     width: 60,

@@ -75,7 +75,7 @@ export const ActivityTimeline = ({
       pending: { bg: theme.colors.warning[100], text: theme.colors.warning[700], border: theme.colors.warning[300] },
       confirmed: { bg: theme.colors.primary[100], text: theme.colors.primary[700], border: theme.colors.primary[300] },
       completed: { bg: theme.colors.success[100], text: theme.colors.success[700], border: theme.colors.success[300] },
-      cancelled: { bg: theme.colors.neutral[100], text: theme.colors.neutral[600], border: theme.colors.neutral[300] },
+      cancelled: { bg: theme.colors.surface.cream, text: theme.colors.neutral[600], border: theme.colors.surface.border },
     };
 
     const statusColor = statusColors[appointment.status || 'pending'];
@@ -248,13 +248,13 @@ const styles = StyleSheet.create({
   },
   appointmentCard: {
     ...theme.shadows.md,
-    backgroundColor: theme.colors.neutral[50],
+    backgroundColor: theme.colors.surface.cream,
     borderRadius: theme.borderRadius.lg,
     padding: theme.spacing.lg,
     width: 220,
     gap: theme.spacing.md,
     borderWidth: 1,
-    borderColor: theme.colors.neutral[200],
+    borderColor: theme.colors.surface.border,
   },
   timeBadge: {
     flexDirection: 'row',
@@ -334,10 +334,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: theme.spacing.md,
     padding: theme.spacing.md,
-    backgroundColor: theme.colors.neutral[50],
+    backgroundColor: theme.colors.surface.cream,
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
-    borderColor: theme.colors.neutral[200],
+    borderColor: theme.colors.surface.border,
   },
   activityIcon: {
     width: 40,

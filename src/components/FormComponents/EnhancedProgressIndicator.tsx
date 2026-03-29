@@ -98,8 +98,8 @@ export const EnhancedProgressIndicator = ({
         };
       default:
         return {
-          bg: colors.neutral[100],
-          border: colors.neutral[300],
+          bg: colors.surface.cream,
+          border: colors.surface.border,
           text: colors.neutral[500],
           icon: null,
         };
@@ -138,7 +138,7 @@ export const EnhancedProgressIndicator = ({
         style={[
           styles.progressBarBackground,
           {
-            backgroundColor: colors.neutral[200],
+            backgroundColor: colors.surface.segmentTrack,
             height: 4,
             borderRadius: 2,
             marginBottom: spacing.lg,

@@ -75,7 +75,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
 
   return (
     <LinearGradient
-      colors={['#fafaf9', '#f5f5f4', '#fafaf9']}
+      colors={['#ffffff', '#ffffff', '#ffffff']}
       style={styles.container}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '18deg' }],
   },
   cardContainer: {
-    backgroundColor: '#fafaf9',
+    backgroundColor: '#ffffff',
     borderRadius: 24,
     boxShadow: '0 10px 20px rgba(37, 99, 235, 0.08)',
     elevation: 8,

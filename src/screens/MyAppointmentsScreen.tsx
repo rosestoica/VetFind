@@ -512,7 +512,7 @@ export const MyAppointmentsScreen = ({ navigation }: MyAppointmentsScreenProps) 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.neutral[100],
+    backgroundColor: theme.colors.surface.background,
   },
   header: {
     paddingHorizontal: theme.spacing.lg,
@@ -548,13 +548,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
     gap: theme.spacing.sm,
-    backgroundColor: theme.colors.neutral[50],
+    backgroundColor: theme.colors.surface.background,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.neutral[200],
+    borderBottomColor: theme.colors.surface.border,
   },
   filterChip: {
-    backgroundColor: theme.colors.neutral[100],
-    borderColor: theme.colors.neutral[200],
+    backgroundColor: theme.colors.surface.cream,
+    borderColor: theme.colors.surface.border,
   },
   filterChipSelected: {
     backgroundColor: theme.colors.primary.main,
@@ -612,12 +612,12 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
   },
   appointmentCard: {
-    backgroundColor: theme.colors.neutral[50],
+    backgroundColor: theme.colors.surface.card,
     borderRadius: theme.borderRadius.lg,
     padding: theme.spacing.lg,
     marginBottom: theme.spacing.md,
     borderWidth: 1,
-    borderColor: theme.colors.neutral[200],
+    borderColor: theme.colors.surface.border,
     ...theme.shadows.md,
   },
   cardHeader: {
@@ -627,7 +627,7 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
     paddingBottom: theme.spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.neutral[200],
+    borderBottomColor: theme.colors.surface.border,
   },
   clinicName: {
     fontSize: 16,
@@ -662,7 +662,7 @@ const styles = StyleSheet.create({
   },
   expandedDetails: {
     borderTopWidth: 1,
-    borderTopColor: theme.colors.neutral[200],
+    borderTopColor: theme.colors.surface.border,
     paddingTop: theme.spacing.sm,
     marginTop: theme.spacing.xs,
   },
@@ -690,7 +690,7 @@ const styles = StyleSheet.create({
   },
   detailsSection: {
     borderTopWidth: 1,
-    borderTopColor: theme.colors.neutral[200],
+    borderTopColor: theme.colors.surface.border,
     paddingTop: theme.spacing.sm,
     marginTop: theme.spacing.xs,
   },

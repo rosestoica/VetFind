@@ -86,7 +86,7 @@ export const ContextualHelp = ({
               styles.modalContent,
               styleHelpers.card('elevated'),
               {
-                backgroundColor: colors.neutral[50],
+                backgroundColor: colors.surface.card,
                 padding: spacing.xl,
                 margin: spacing.xl,
                 borderRadius: borderRadius.lg,
@@ -106,7 +106,7 @@ export const ContextualHelp = ({
                 style={[
                   styles.closeButton,
                   {
-                    backgroundColor: colors.neutral[200],
+                    backgroundColor: colors.surface.cream,
                     borderRadius: borderRadius.full,
                     padding: spacing.xs,
                   },
@@ -169,7 +169,7 @@ export const ContextualHelp = ({
                       style={[
                         styles.exampleItem,
                         {
-                          backgroundColor: colors.neutral[100],
+                          backgroundColor: colors.surface.cream,
                           padding: spacing.md,
                           borderRadius: borderRadius.sm,
                           marginBottom: spacing.sm,

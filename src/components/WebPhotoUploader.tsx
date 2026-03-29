@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
   },
   progressBar: {
     height: 8,
-    backgroundColor: theme.colors.neutral[200],
+    backgroundColor: theme.colors.surface.segmentTrack,
     borderRadius: 4,
     overflow: 'hidden',
   },
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     overflow: 'hidden',
     position: 'relative',
-    backgroundColor: theme.colors.neutral[100],
+    backgroundColor: theme.colors.surface.cream,
   },
   photoImage: {
     width: '100%',

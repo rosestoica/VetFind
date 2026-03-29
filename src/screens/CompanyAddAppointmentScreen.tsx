@@ -318,11 +318,11 @@ export const CompanyAddAppointmentScreen = () => {
 const styles = StyleSheet.create({
 	safe: {
 		flex: 1,
-		backgroundColor: theme.colors.neutral[100],
+		backgroundColor: theme.colors.surface.cream,
 	},
 	container: {
 		flex: 1,
-		backgroundColor: theme.colors.neutral[100],
+		backgroundColor: theme.colors.surface.cream,
 	},
 	header: {
 		flexDirection: 'row',
@@ -330,8 +330,8 @@ const styles = StyleSheet.create({
 		paddingHorizontal: theme.spacing.md,
 		paddingVertical: theme.spacing.sm,
 		borderBottomWidth: 1,
-		borderBottomColor: theme.colors.neutral[200],
-		backgroundColor: theme.colors.neutral[50],
+		borderBottomColor: theme.colors.surface.border,
+		backgroundColor: theme.colors.surface.background,
 	},
 	headerTitle: {
 		flex: 1,
@@ -352,7 +352,7 @@ const styles = StyleSheet.create({
 		marginBottom: theme.spacing.md,
 	},
 	input: {
-		backgroundColor: theme.colors.neutral[50],
+		backgroundColor: theme.colors.surface.background,
 	},
 	divider: {
 		marginVertical: theme.spacing.lg,
@@ -377,9 +377,9 @@ const styles = StyleSheet.create({
 		width: 64,
 		height: 76,
 		borderRadius: theme.borderRadius.lg,
-		backgroundColor: theme.colors.neutral[50],
+		backgroundColor: theme.colors.surface.background,
 		borderWidth: 1,
-		borderColor: theme.colors.neutral[200],
+		borderColor: theme.colors.surface.border,
 		justifyContent: 'center',
 		alignItems: 'center',
 		position: 'relative',
@@ -436,7 +436,7 @@ const styles = StyleSheet.create({
 		borderRadius: theme.borderRadius.lg,
 		borderWidth: 1,
 		borderColor: theme.colors.neutral[300],
-		backgroundColor: theme.colors.neutral[50],
+		backgroundColor: theme.colors.surface.background,
 		minWidth: 92,
 		alignItems: 'center',
 	},

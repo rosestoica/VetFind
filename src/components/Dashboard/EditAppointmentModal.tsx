@@ -525,7 +525,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingBottom: theme.spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.neutral[200],
+    borderBottomColor: theme.colors.surface.border,
   },
   modalTitle: {
     fontWeight: '700',
@@ -624,10 +624,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: theme.spacing.md,
-    backgroundColor: theme.colors.neutral[50],
+    backgroundColor: theme.colors.surface.cream,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.colors.neutral[200],
+    borderColor: theme.colors.surface.border,
     marginBottom: theme.spacing.sm,
   },
   dateTimeContent: {
@@ -693,7 +693,7 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
     paddingHorizontal: theme.spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.neutral[200],
+    borderBottomColor: theme.colors.surface.border,
   },
   reasonOptionText: {
     color: theme.colors.neutral[800],
@@ -733,7 +733,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     padding: theme.spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.neutral[200],
+    borderTopColor: theme.colors.surface.border,
   },
   cancelButton: {
     flex: 1,

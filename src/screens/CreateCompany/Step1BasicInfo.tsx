@@ -92,7 +92,7 @@ export const Step1BasicInfo = ({ data, onChange, errors = {} }: Step1BasicInfoPr
             error={!!errors.name}
             maxLength={100}
             placeholder="ex., Clinica Veterinară Happy Paws"
-            style={[styles.input, { backgroundColor: colors.neutral[50] }]}
+            style={[styles.input, { backgroundColor: colors.surface.cream }]}
             outlineColor={colors.neutral[300]}
             activeOutlineColor={colors.primary.main}
             accessibilityLabel="Nume companie"
@@ -120,7 +120,7 @@ export const Step1BasicInfo = ({ data, onChange, errors = {} }: Step1BasicInfoPr
             autoCapitalize="none"
             autoCorrect={false}
             placeholder="contact@happypaws.com"
-            style={[styles.input, { backgroundColor: colors.neutral[50] }]}
+            style={[styles.input, { backgroundColor: colors.surface.cream }]}
             outlineColor={colors.neutral[300]}
             activeOutlineColor={colors.primary.main}
             accessibilityLabel="Email de contact"
@@ -161,7 +161,7 @@ export const Step1BasicInfo = ({ data, onChange, errors = {} }: Step1BasicInfoPr
                 mode="outlined"
                 error={!!errors.cui}
                 placeholder="RO12345678 sau 12345678"
-                style={[styles.input, { backgroundColor: colors.neutral[50] }]}
+                style={[styles.input, { backgroundColor: colors.surface.cream }]}
                 outlineColor={colors.neutral[300]}
                 activeOutlineColor={colors.primary.main}
                 accessibilityLabel="CUI"
@@ -203,7 +203,7 @@ export const Step1BasicInfo = ({ data, onChange, errors = {} }: Step1BasicInfoPr
             numberOfLines={3}
             maxLength={100}
             placeholder="Scurtă descriere a clinicii tale (max 100 caractere)"
-            style={[styles.input, styles.textArea, { backgroundColor: colors.neutral[50] }]}
+            style={[styles.input, styles.textArea, { backgroundColor: colors.surface.cream }]}
             outlineColor={colors.neutral[300]}
             activeOutlineColor={colors.primary.main}
             accessibilityLabel="Descriere scurtă"

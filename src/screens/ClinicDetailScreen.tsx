@@ -283,13 +283,13 @@ const PaymentMethodsSection: React.FC<{ clinic: Clinic }> = ({ clinic }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5'
+    backgroundColor: '#FFFFFF'
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5'
+    backgroundColor: '#FFFFFF'
   },
   loadingText: {
     marginTop: 10,
@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 40
   },
   errorText: {
