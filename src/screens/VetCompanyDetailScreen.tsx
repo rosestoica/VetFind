@@ -234,7 +234,7 @@ const ServiceCategorySection = ({
 export const VetCompanyDetailScreen = () => {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteProps>();
-  const { companyId } = route.params;
+  const { companySlug } = route.params;
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
   const [company, setCompany] = useState<Company | null>(null);
@@ -246,14 +246,13 @@ export const VetCompanyDetailScreen = () => {
   const bookingRef = React.useRef<any>(null);
   const [sheetOffset, setSheetOffset] = useState(0);
 
-  // Fetch company data (company now includes services returned by backend)
   useEffect(() => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
         setError(null);
 
-        const companyData = await ApiService.getCompanyById(companyId);
+        const companyData = await ApiService.getCompanyBySlug(companySlug);
 
         if (!companyData) {
           setError('Compania nu a fost găsită.');
@@ -262,24 +261,21 @@ export const VetCompanyDetailScreen = () => {
 
         setCompany(companyData);
 
-        // Prefer services returned inside company object; fallback to separate endpoint
-        const rawServices = ((companyData as any).services as any[]) || (await ApiService.getServices(companyId));
+        const cid = companyData.id;
+        const rawServices = ((companyData as any).services as any[]) || (await ApiService.getServices(cid));
 
-        // Defensive filter: ensure we only show services that belong to this company and are active
         const serviceList = (rawServices || []).filter((s: any) => {
-          // Some older rows may not include company_id; treat those as non-matching
-          const belongs = s && (s.company_id === companyData.id || s.company_id === companyId || s.companyId === companyData.id);
+          const belongs = s && (s.company_id === cid || s.companyId === cid);
           const active = s && (s.is_active === undefined || s.is_active === true);
           return Boolean(belongs && active);
         });
 
         if ((rawServices || []).length > 0 && serviceList.length === 0) {
-          console.warn('VetCompanyDetail: all services were filtered out for company', companyId, rawServices);
+          console.warn('VetCompanyDetail: all services were filtered out for company', cid, rawServices);
         }
 
         setServices(serviceList || []);
 
-        // Auto-expand first category
         const grouped = groupServicesByCategory(serviceList || []);
         const firstCategory = Object.keys(grouped)[0];
         if (firstCategory) {
@@ -289,14 +285,13 @@ export const VetCompanyDetailScreen = () => {
         setError(err.message || 'Nu s-au putut încărca detaliile companiei.');
         console.error('Error fetching company:', err);
       } finally {
-        // If any element kept focus (e.g. from previous page/modal), blur it on web so it doesn't block interactions
         blurActiveElementIfWeb();
         setIsLoading(false);
       }
     };
 
     fetchData();
-  }, [companyId]);
+  }, [companySlug]);
 
   // Defensive: disable blocking aria-hidden overlays on mount (web only)
   useEffect(() => {
@@ -357,11 +352,10 @@ export const VetCompanyDetailScreen = () => {
 
   const handleServiceSelect = (service: CompanyService) => {
     setServiceSheetVisible(false);
-    // Navigate to BookAppointmentScreen with complete service and company data
     navigation.navigate('BookAppointment', {
-      companyId,
+      companyId: company!.id,
       companyName: company?.name || '',
-      selectedServices: [service], // Pass array of selected services
+      selectedServices: [service],
     });
   };
 
@@ -616,7 +610,7 @@ export const VetCompanyDetailScreen = () => {
               style={styles.seeReviewsButton}
               onPress={() => {
                 navigation.navigate('CompanyReviews', {
-                  companyId,
+                  companyId: company!.id,
                   companyName: company?.name,
                 });
               }}
@@ -645,7 +639,7 @@ export const VetCompanyDetailScreen = () => {
           {/* Description (moved higher so pet owners see it near the top) */}
           {company.description && (
             <View style={styles.descriptionSection}>
-              <Text style={styles.sectionTitle}>About</Text>
+              <Text style={styles.sectionTitle}>Descriere clinică</Text>
               <Text style={styles.descriptionText}>{company.description}</Text>
             </View>
           )}
@@ -746,7 +740,7 @@ export const VetCompanyDetailScreen = () => {
               labelStyle={styles.bookingButtonLabel}
               uppercase={false}
             >
-              Book Appointment
+              Rezervă o programare
             </Button>
           </View>
         )}
@@ -786,7 +780,7 @@ export const VetCompanyDetailScreen = () => {
         onSelectServices={(selected) => {
           setServiceSheetVisible(false);
           navigation.navigate('BookAppointment', {
-            companyId,
+            companyId: company!.id,
             companyName: company?.name || '',
             selectedServices: selected,
           });

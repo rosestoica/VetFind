@@ -5,6 +5,7 @@ import {
   UpdateCompanyDTO,
   CompanySearchFilters,
 } from '../types/company.types';
+import { toCompanySlug } from '../utils/slug';
 
 // Object literal with static-like methods for company operations
 export const CompanyModel = {
@@ -40,20 +41,22 @@ export const CompanyModel = {
       emergency_contact_phone = null,
     } = companyData;
 
+    const slug = toCompanySlug(name);
+
     const query = `
       INSERT INTO companies (
-        user_id, name, email, phone, website, description,
+        user_id, name, slug, email, phone, website, description,
         address, city, state, zip_code, latitude, longitude,
         clinic_type, years_in_business, num_veterinarians,
         logo_url, photos, specializations, facilities, payment_methods, opening_hours,
         company_completed, emergency_available, emergency_fee, emergency_contact_phone
       )
       VALUES (
-        $1, $2, $3, $4, $5, $6,
-        $7, $8, $9, $10, $11, $12,
-        $13, $14, $15,
-        $16, $17, $18, $19, $20, $21,
-        $22, $23, $24, $25
+        $1, $2, $3, $4, $5, $6, $7,
+        $8, $9, $10, $11, $12, $13,
+        $14, $15, $16,
+        $17, $18, $19, $20, $21, $22,
+        $23, $24, $25, $26
       )
       RETURNING *
     `;
@@ -61,6 +64,7 @@ export const CompanyModel = {
     const values = [
       user_id,
       name,
+      slug,
       email,
       phone,
       website || null,
@@ -118,6 +122,20 @@ export const CompanyModel = {
   },
 
   /**
+   * Find company by URL slug (unique)
+   */
+  async findBySlug(slug: string): Promise<Company | null> {
+    const query = 'SELECT * FROM companies WHERE slug = $1';
+    const result = await pool.query(query, [slug]);
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return CompanyModel._deserializeCompany(result.rows[0]);
+  },
+
+  /**
    * Find company by user ID
    */
   async findByUserId(userId: number): Promise<Company | null> {
@@ -143,6 +161,9 @@ export const CompanyModel = {
     if (companyData.name !== undefined) {
       fields.push(`name = $${paramCount}`);
       values.push(companyData.name);
+      paramCount++;
+      fields.push(`slug = $${paramCount}`);
+      values.push(toCompanySlug(companyData.name));
       paramCount++;
     }
 

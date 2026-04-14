@@ -304,6 +304,22 @@ const createApiService = () => {
     },
 
     /**
+     * Get company by URL slug (public).
+     */
+    async getCompanyBySlug(slug: string): Promise<Company | null> {
+      try {
+        const response: CompanyApiResponse = await request(`/companies/slug/${encodeURIComponent(slug)}`, 'GET');
+        if (!response.success || !response.data) {
+          return null;
+        }
+        return response.data;
+      } catch (error: any) {
+        console.error('Get company by slug error:', error);
+        return null;
+      }
+    },
+
+    /**
      * Update company profile
      */
     async updateCompany(id: number, data: UpdateCompanyDTO, accessToken?: string): Promise<Company> {
@@ -754,7 +770,13 @@ const createApiService = () => {
 
         return response.data.distances;
       } catch (error: any) {
-        console.error('Get route distances error:', error);
+        const msg = String(error?.message ?? error ?? '');
+        // Backend fără Google Routes — sortarea rămâne pe distanță „crow‑flight” (haversine)
+        if (/not configured|routes api|google routes/i.test(msg)) {
+          console.warn('Route distances indisponibile (API neconfigurată); folosește distanță estimată.');
+        } else {
+          console.error('Get route distances error:', error);
+        }
         return [];
       }
     },

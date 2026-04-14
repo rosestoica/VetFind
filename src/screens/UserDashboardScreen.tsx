@@ -21,6 +21,7 @@ import {
   Platform,
   TextInput as RNTextInput,
   Image,
+  useWindowDimensions,
 } from 'react-native';
 import { Text, ActivityIndicator, Button, Snackbar, Portal, Dialog, Menu } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -41,6 +42,7 @@ import { useLocation, calculateDistance } from '../hooks/useLocation';
 import { useRouteDistance } from '../hooks/useRouteDistance';
 import { useAuth } from '../context/AuthContext';
 import { theme } from '../theme';
+import { toCompanySlug } from '../utils/slug';
 import LeafletMapWeb from '../components/LeafletMapWeb';
 
 type NavigationProp = StackNavigationProp<RootStackParamList, 'UserDashboard'>;
@@ -55,6 +57,47 @@ const HERO_CAT_PX = { w: 323, h: 243 } as const;
 const HERO_MASCOT_DISPLAY_WIDTH = Math.min(181, SCREEN_WIDTH * 0.306);
 /** Pisică mai mică decât câinele (doar ea folosește această lățime). */
 const HERO_CAT_DISPLAY_WIDTH = HERO_MASCOT_DISPLAY_WIDTH * 0.8;
+
+/** Distanțele din calculateDistance sunt în km; la Δ ≤ ~100 m departajăm după rating */
+const DISTANCE_TIE_BREAK_KM = 0.1;
+
+/** Sub acest prag (px) meniul trece pe hamburger; deasupra se afișează inline cu separatoare „|" */
+const NAV_INLINE_BREAKPOINT = 600;
+
+function getCompanyRating(company: Company): number {
+  const r = (company as any).avg_rating;
+  return typeof r === 'number' ? r : Number(r || 0);
+}
+
+function compareByDistanceThenRating<T extends { company: Company; distance?: number }>(
+  a: T,
+  b: T,
+  ratingAsTiebreak: boolean
+): number {
+  const ad = a.distance;
+  const bd = b.distance;
+  const aInf = ad === undefined ? Number.POSITIVE_INFINITY : ad;
+  const bInf = bd === undefined ? Number.POSITIVE_INFINITY : bd;
+
+  if (
+    ratingAsTiebreak &&
+    typeof ad === 'number' &&
+    typeof bd === 'number' &&
+    Number.isFinite(ad) &&
+    Number.isFinite(bd)
+  ) {
+    const dDiff = Math.abs(ad - bd);
+    if (dDiff <= DISTANCE_TIE_BREAK_KM) {
+      const rc = getCompanyRating(b.company) - getCompanyRating(a.company);
+      if (rc !== 0) return rc;
+    }
+  }
+  return aInf - bInf;
+}
+
+function compareByRatingOnly<T extends { company: Company }>(a: T, b: T): number {
+  return getCompanyRating(b.company) - getCompanyRating(a.company);
+}
 
 /** Leaflet map HTML (works in WebView on native and in iframe/WebView-like HTML). */
 function getMapHtml(
@@ -110,7 +153,9 @@ function getMapHtml(
 
 export const UserDashboardScreen = () => {
   const navigation = useNavigation<NavigationProp>();
-  const { logout, user } = useAuth();
+  const { width: windowWidth } = useWindowDimensions();
+  const showInlineNav = windowWidth >= NAV_INLINE_BREAKPOINT;
+  const { logout, user, accessToken: authAccessToken } = useAuth();
   const { location, permissionStatus, requestPermission, refreshLocation, isLoading: locationLoading } = useLocation();
   const {
     fetchDistances,
@@ -133,7 +178,10 @@ export const UserDashboardScreen = () => {
   /** Căutare după nume/adresă clinică vs după serviciu oferit */
   const [searchScope, setSearchScope] = useState<'clinic' | 'service'>('service');
   const [scopeMenuVisible, setScopeMenuVisible] = useState(false);
-  const [sortMode, setSortMode] = useState<'none' | 'closest' | 'min_asc' | 'max_desc' | 'rating_desc'>('none');
+  /** Sortare preț (doar căutare serviciu); distanță și rating sunt independinte (pot fi ambele activate) */
+  const [sortMode, setSortMode] = useState<'none' | 'min_asc' | 'max_desc'>('none');
+  const [sortByDistance, setSortByDistance] = useState(false);
+  const [sortByRating, setSortByRating] = useState(false);
   // Snackbar for web/native feedback
   const [snackVisible, setSnackVisible] = useState(false);
   const [snackMessage, setSnackMessage] = useState('');
@@ -154,9 +202,6 @@ export const UserDashboardScreen = () => {
   // Location source: 'current' = GPS, 'home' = user's home address from DB
   const [locationSource, setLocationSource] = useState<'current' | 'home' | null>(null);
   const isLocationActive = locationSource === 'current' || locationSource === 'home';
-  // Alertă „locație necesară” la Sortează după distanță (Dialog pe web, unde Alert.alert poate să nu apară)
-  const [locationRequiredAlertVisible, setLocationRequiredAlertVisible] = useState(false);
-
   // Coordinates for distance and map: from GPS when 'current', from user record when 'home'.
   // useMemo avoids new object each render → prevents useEffect/useCallback dependency churn.
   const effectiveLocation = useMemo((): { latitude: number; longitude: number } | null => {
@@ -193,6 +238,8 @@ export const UserDashboardScreen = () => {
       if (hasSearchText) {
         setSearchQuery('');
         setSortMode('none');
+        setSortByDistance(false);
+        setSortByRating(false);
 
         // restore default list
         setFilteredCompanies(companies);
@@ -219,6 +266,8 @@ export const UserDashboardScreen = () => {
       e.preventDefault();
       setSearchQuery('');
       setSortMode('none');
+      setSortByDistance(false);
+      setSortByRating(false);
       setFilteredCompanies(companies);
       setCompaniesWithDistance(companies.map((company) => ({ company })));
     });
@@ -329,14 +378,10 @@ export const UserDashboardScreen = () => {
       const distance = calculateDistance(coords.latitude, coords.longitude, company.latitude, company.longitude);
       return { company, distance };
     });
-    withDist.sort((a, b) => {
-      if (a.distance === undefined) return 1;
-      if (b.distance === undefined) return -1;
-      return a.distance - b.distance;
-    });
+    withDist.sort((a, b) => compareByDistanceThenRating(a, b, sortByRating));
     setCompaniesWithDistance(withDist);
     setFilteredCompanies(withDist.map((x) => x.company));
-  }, [companies, isLocationActive, effectiveLocation, locationSource, location]);
+  }, [companies, isLocationActive, effectiveLocation, locationSource, location, sortByRating]);
 
   /**
    * Search companies for a given service name and attach matched service/pricing
@@ -345,7 +390,7 @@ export const UserDashboardScreen = () => {
     async (query: string) => {
       const q = query.trim().toLowerCase();
       if (!q) {
-        if (isLocationActive && sortMode === 'closest') {
+        if (isLocationActive && sortByDistance) {
           sortAllCompaniesByDistance();
         } else {
           setFilteredCompanies(companies);
@@ -383,28 +428,7 @@ export const UserDashboardScreen = () => {
           }
         });
 
-        // Sort matches by distance when available by default
-        matches.sort((a, b) => {
-          if (a.distance === undefined) return 1;
-          if (b.distance === undefined) return -1;
-          return a.distance - b.distance;
-        });
-
-        // Apply user-selected sorting
-        if (sortMode === 'closest') {
-          // Closest first (if distance is unknown, keep it at the end)
-          matches.sort((a, b) => {
-            const ad = typeof a.distance === 'number' ? a.distance : Number.POSITIVE_INFINITY;
-            const bd = typeof b.distance === 'number' ? b.distance : Number.POSITIVE_INFINITY;
-            return ad - bd;
-          });
-        } else if (sortMode === 'rating_desc') {
-          matches.sort((a, b) => {
-            const ar = typeof (a.company as any).avg_rating === 'number' ? (a.company as any).avg_rating : Number((a.company as any).avg_rating || 0);
-            const br = typeof (b.company as any).avg_rating === 'number' ? (b.company as any).avg_rating : Number((b.company as any).avg_rating || 0);
-            return (br || 0) - (ar || 0);
-          });
-        } else if (sortMode === 'min_asc') {
+        if (sortMode === 'min_asc') {
           matches.sort((a, b) => {
             const pa = a.matchedService?.price_min ?? Number.POSITIVE_INFINITY;
             const pb = b.matchedService?.price_min ?? Number.POSITIVE_INFINITY;
@@ -416,6 +440,14 @@ export const UserDashboardScreen = () => {
             const pb = b.matchedService?.price_max ?? Number.NEGATIVE_INFINITY;
             return pb - pa;
           });
+        } else if (sortByDistance && sortByRating) {
+          matches.sort((a, b) => compareByDistanceThenRating(a, b, true));
+        } else if (sortByDistance) {
+          matches.sort((a, b) => compareByDistanceThenRating(a, b, false));
+        } else if (sortByRating) {
+          matches.sort((a, b) => compareByRatingOnly(a, b));
+        } else {
+          matches.sort((a, b) => compareByDistanceThenRating(a, b, false));
         }
 
         setFilteredCompanies(matches.map((m) => m.company));
@@ -426,9 +458,10 @@ export const UserDashboardScreen = () => {
         setIsSearching(false);
       }
     },
-    // NOTE: Do NOT include companiesWithDistance in dependencies to avoid infinite loop
+    // NOTE: fără filteredCompanies în deps — altfel după setFilteredCompanies se recreează callback-ul
+    // și useEffect-ul care apelează refreshSearchResults intră în buclă.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [companies, filteredCompanies, location, effectiveLocation, selectedDistance, sortMode, isLocationActive, sortAllCompaniesByDistance]
+    [companies, location, effectiveLocation, selectedDistance, sortMode, sortByDistance, sortByRating, isLocationActive, sortAllCompaniesByDistance]
   );
 
   /**
@@ -438,7 +471,7 @@ export const UserDashboardScreen = () => {
     async (query: string) => {
       const q = query.trim().toLowerCase();
       if (!q) {
-        if (isLocationActive && sortMode === 'closest') {
+        if (isLocationActive && sortByDistance) {
           sortAllCompaniesByDistance();
         } else {
           setFilteredCompanies(companies);
@@ -471,24 +504,14 @@ export const UserDashboardScreen = () => {
           }
         }
 
-        matches.sort((a, b) => {
-          if (a.distance === undefined) return 1;
-          if (b.distance === undefined) return -1;
-          return a.distance - b.distance;
-        });
-
-        if (sortMode === 'closest') {
-          matches.sort((a, b) => {
-            const ad = typeof a.distance === 'number' ? a.distance : Number.POSITIVE_INFINITY;
-            const bd = typeof b.distance === 'number' ? b.distance : Number.POSITIVE_INFINITY;
-            return ad - bd;
-          });
-        } else if (sortMode === 'rating_desc') {
-          matches.sort((a, b) => {
-            const ar = typeof (a.company as any).avg_rating === 'number' ? (a.company as any).avg_rating : Number((a.company as any).avg_rating || 0);
-            const br = typeof (b.company as any).avg_rating === 'number' ? (b.company as any).avg_rating : Number((b.company as any).avg_rating || 0);
-            return (br || 0) - (ar || 0);
-          });
+        if (sortByDistance && sortByRating) {
+          matches.sort((a, b) => compareByDistanceThenRating(a, b, true));
+        } else if (sortByDistance) {
+          matches.sort((a, b) => compareByDistanceThenRating(a, b, false));
+        } else if (sortByRating) {
+          matches.sort((a, b) => compareByRatingOnly(a, b));
+        } else {
+          matches.sort((a, b) => compareByDistanceThenRating(a, b, false));
         }
 
         setFilteredCompanies(matches.map((m) => m.company));
@@ -500,7 +523,7 @@ export const UserDashboardScreen = () => {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [companies, filteredCompanies, location, effectiveLocation, selectedDistance, sortMode, isLocationActive, sortAllCompaniesByDistance]
+    [companies, location, effectiveLocation, selectedDistance, sortByDistance, sortByRating, isLocationActive, sortAllCompaniesByDistance]
   );
 
   const refreshSearchResults = useCallback(() => {
@@ -528,25 +551,23 @@ export const UserDashboardScreen = () => {
   // If the user selected "Closest" but location was missing, once location becomes available
   // automatically re-run the search so distances are computed and the list is sorted properly.
   useEffect(() => {
-    if (sortMode !== 'closest') return;
+    if (!sortByDistance) return;
     const orig = effectiveLocation || location;
     if (!orig) return;
     if ((searchQuery || '').trim().length === 0) return;
 
     refreshSearchResults();
-  }, [effectiveLocation, location, refreshSearchResults, searchQuery, sortMode]);
+  }, [effectiveLocation, location, refreshSearchResults, searchQuery, sortByDistance]);
 
   /**
-   * Fetch route distances when "Sortează după distanță" is active and companies are loaded
-   * This provides actual driving distances from Google Routes API
+   * Opțional: distanțe pe rută. Dacă backend-ul nu are Routes API, lista rămâne sortată după haversine.
    */
   useEffect(() => {
     const origin = effectiveLocation || location;
-    if (sortMode !== 'closest' || !origin || filteredCompanies.length === 0) {
+    if (!sortByDistance || !origin || filteredCompanies.length === 0) {
       return;
     }
 
-    // Get company IDs that have coordinates
     const companyIdsWithCoords = filteredCompanies
       .filter((c) => c.latitude && c.longitude)
       .map((c) => String(c.id));
@@ -555,13 +576,13 @@ export const UserDashboardScreen = () => {
       return;
     }
 
-    // Get access token from localStorage (for web) or AsyncStorage (for mobile)
-    const accessToken = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-
-    if (accessToken) {
-      fetchDistances(origin, companyIdsWithCoords, accessToken);
+    const token =
+      authAccessToken ||
+      (typeof window !== 'undefined' ? window.localStorage?.getItem('accessToken') : null);
+    if (token) {
+      void fetchDistances(origin, companyIdsWithCoords, token);
     }
-  }, [sortMode, effectiveLocation, location, filteredCompanies, fetchDistances]);
+  }, [sortByDistance, effectiveLocation, location, filteredCompanies, fetchDistances, authAccessToken]);
 
   /**
    * Handle distance selection
@@ -600,12 +621,33 @@ export const UserDashboardScreen = () => {
   };
 
   /**
-   * When "Sortează după distanță" is active and location is available, keep list sorted by distance
+   * Fără căutare activă: aplică sortarea după distanță / rating / implicit (fără re-fetch API căutare).
    */
   useEffect(() => {
-    if (sortMode !== 'closest' || !isLocationActive) return;
-    sortAllCompaniesByDistance();
-  }, [sortMode, isLocationActive, sortAllCompaniesByDistance]);
+    const q = (searchQuery || '').trim();
+    if (q.length > 0) return;
+    if (sortMode !== 'none') return;
+    if (sortByDistance && isLocationActive) {
+      sortAllCompaniesByDistance();
+    } else if (!sortByDistance && sortByRating) {
+      const list = companies.map((company) => ({ company }));
+      list.sort(compareByRatingOnly);
+      setFilteredCompanies(list.map((m) => m.company));
+      setCompaniesWithDistance(list);
+    } else if (!sortByDistance && !sortByRating) {
+      setFilteredCompanies(companies);
+      setCompaniesWithDistance(companies.map((c) => ({ company: c })));
+    }
+  }, [sortByDistance, sortByRating, isLocationActive, companies, searchQuery, sortMode, sortAllCompaniesByDistance]);
+
+  /**
+   * Cu text în căutare: re-aplică filtrul + sortarea când se schimbă opțiunile (inclusiv rating+distanță).
+   */
+  useEffect(() => {
+    const q = (searchQuery || '').trim();
+    if (q.length === 0) return;
+    refreshSearchResults();
+  }, [sortByDistance, sortByRating, sortMode, isLocationActive, searchQuery, searchScope, refreshSearchResults]);
 
   const handleAvailableNowPress = async () => {
     if (availableNowMode) {
@@ -641,7 +683,7 @@ export const UserDashboardScreen = () => {
         // keep previous data
       }
     }
-    if (isLocationActive && sortMode === 'closest') {
+    if (isLocationActive && sortByDistance) {
       sortAllCompaniesByDistance();
     }
     setIsRefreshing(false);
@@ -650,8 +692,8 @@ export const UserDashboardScreen = () => {
   /**
    * Navigate to company detail
    */
-  const handleCompanyPress = (companyId: number) => {
-    navigation.navigate('VetCompanyDetail', { companyId });
+  const handleCompanyPress = (_companyId: number, companyName: string) => {
+    navigation.navigate('VetCompanyDetail', { companySlug: toCompanySlug(companyName) });
   };
 
   /**
@@ -663,6 +705,8 @@ export const UserDashboardScreen = () => {
     if (searchScope === 'clinic') return;
     const mode = dir === 'asc' ? 'min_asc' : 'max_desc';
     setSortMode(mode);
+    setSortByDistance(false);
+    setSortByRating(false);
 
     // If we have a current search with matchedService info, re-sort those results
     const matches = companiesWithDistance.filter((c) => c.matchedService) as Array<{ company: Company; distance?: number; matchedService: any }>;
@@ -678,37 +722,11 @@ export const UserDashboardScreen = () => {
     setCompaniesWithDistance(matches);
   };
 
-  const handleSortRating = () => {
-    const mode: 'rating_desc' = 'rating_desc';
-    setSortMode(mode);
-
-    const hasSearch = (searchQuery || '').trim().length > 0;
-    const listToSort = hasSearch
-      ? (searchScope === 'clinic'
-          ? ([...companiesWithDistance] as Array<{ company: Company; distance?: number; matchedService?: any }>)
-          : (companiesWithDistance.filter((c) => c.matchedService) as Array<{ company: Company; distance?: number; matchedService: any }>))
-      : [...companiesWithDistance];
-
-    if (listToSort.length === 0) return;
-
-    listToSort.sort((a, b) => {
-      const ar = typeof (a.company as any).avg_rating === 'number' ? (a.company as any).avg_rating : Number((a.company as any).avg_rating || 0);
-      const br = typeof (b.company as any).avg_rating === 'number' ? (b.company as any).avg_rating : Number((b.company as any).avg_rating || 0);
-      return (br || 0) - (ar || 0);
-    });
-
-    setFilteredCompanies(listToSort.map((m) => m.company));
-    setCompaniesWithDistance(listToSort.map((m) => ({ company: m.company, distance: m.distance, matchedService: (m as any).matchedService })));
-
-    if (hasSearch) {
-      refreshSearchResults();
-    }
+  const handleToggleRatingSort = () => {
+    setSortByRating((v) => !v);
   };
 
   const handleSortClosest = () => {
-    const mode: 'closest' = 'closest';
-    setSortMode(mode);
-
     // On mobile, Closest requires current location.
     if (!location) {
       setSnackMessage('Activează locația pentru Closest');
@@ -720,6 +738,8 @@ export const UserDashboardScreen = () => {
       }
       return;
     }
+
+    setSortByDistance(true);
 
     const matches = (searchScope === 'clinic'
       ? [...companiesWithDistance]
@@ -734,11 +754,7 @@ export const UserDashboardScreen = () => {
       return { ...m, distance: d };
     });
 
-    matchesWithDistance.sort((a, b) => {
-      const ad = typeof a.distance === 'number' ? a.distance : Number.POSITIVE_INFINITY;
-      const bd = typeof b.distance === 'number' ? b.distance : Number.POSITIVE_INFINITY;
-      return ad - bd;
-    });
+    matchesWithDistance.sort((a, b) => compareByDistanceThenRating(a, b, sortByRating));
 
     setFilteredCompanies(matchesWithDistance.map((m) => m.company));
     setCompaniesWithDistance(matchesWithDistance);
@@ -748,10 +764,14 @@ export const UserDashboardScreen = () => {
     }
   };
 
-  /** Sortează după distanță: doar dacă ai locație activă și permisiuni (pentru current); altfel Alert */
-  const handleSortByDistance = () => {
+  /** Comută sortarea după distanță; afișează butoanele de locație când e activă */
+  const handleToggleDistanceSort = () => {
+    if (sortByDistance) {
+      setSortByDistance(false);
+      return;
+    }
+    setSortByDistance(true);
     if (!isLocationActive) {
-      setLocationRequiredAlertVisible(true);
       return;
     }
     if (locationSource === 'current' && permissionStatus === 'denied') {
@@ -762,7 +782,6 @@ export const UserDashboardScreen = () => {
       );
       return;
     }
-    setSortMode('closest');
     if ((searchQuery || '').trim().length > 0) {
       handleSortClosest();
     } else {
@@ -846,7 +865,7 @@ export const UserDashboardScreen = () => {
   const handleMapClinicOpen = () => {
     if (!selectedMapClinic) return;
     setMapVisible(false);
-    navigation.navigate('VetCompanyDetail', { companyId: selectedMapClinic.id });
+    navigation.navigate('VetCompanyDetail', { companySlug: toCompanySlug(selectedMapClinic.name) });
   };
 
   /**
@@ -881,61 +900,85 @@ export const UserDashboardScreen = () => {
           />
         }
       >
-        {/* Compact Header */}
+        {/* Modern Banner */}
         <LinearGradient
           colors={[...theme.gradients.bannerDuo]}
-          style={styles.compactHeader}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0.6 }}
+          style={styles.modernBanner}
         >
-          <View style={styles.compactHeaderContent}>
-            <View style={styles.headerLeft}>
-              <MaterialCommunityIcons name="paw" size={28} color="#FFFFFF" />
-              <Text style={styles.compactHeaderTitle}>VetFinder</Text>
+          <View style={styles.modernBannerContent}>
+            <View style={styles.bannerLogoWrap}>
+              <View style={styles.bannerLogoPaw}>
+                <MaterialCommunityIcons name="paw" size={20} color="#FFFFFF" />
+              </View>
+              <Text style={styles.bannerLogoText}>VetFinder</Text>
             </View>
 
-            <View style={styles.headerRight}>
-              <View style={styles.sortControls}>
-                <Menu
-                  visible={menuVisible}
-                  onDismiss={closeMenu}
-                  anchor={
-                    <TouchableOpacity
-                      onPress={openMenu}
-                      style={styles.headerIconButton}
-                      activeOpacity={0.7}
-                      accessibilityRole="button"
-                      accessibilityLabel="Menu"
-                    >
-                      <Ionicons name="menu" size={24} color="#FFFFFF" />
-                    </TouchableOpacity>
-                  }
+            {showInlineNav ? (
+              <View style={styles.bannerInlineNav}>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('MyAppointments')}
+                  style={styles.bannerNavItem}
+                  activeOpacity={0.7}
                 >
-                  <Menu.Item
-                    title="Programările mele"
-                    onPress={() => {
-                      closeMenu();
-                      navigation.navigate('MyAppointments');
-                    }}
-                    leadingIcon="calendar-month-outline"
-                  />
-                  <Menu.Item
-                    title="Setări"
-                    onPress={() => {
-                      closeMenu();
-                      navigation.navigate('UserSettings');
-                    }}
-                    leadingIcon="cog-outline"
-                  />
-                  <Menu.Item
-                    title="Deconectare"
-                    onPress={async () => {
-                      closeMenu();
-                      await handleLogout();
-                    }}
-                    leadingIcon="logout"
-                  />
-                </Menu>
+                  <Ionicons name="calendar-outline" size={16} color="rgba(255,255,255,0.85)" />
+                  <Text style={styles.bannerNavItemText}>Programări</Text>
+                </TouchableOpacity>
+                <Text style={styles.bannerNavSep}>|</Text>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('UserSettings')}
+                  style={styles.bannerNavItem}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="person-outline" size={16} color="rgba(255,255,255,0.85)" />
+                  <Text style={styles.bannerNavItemText}>Profil</Text>
+                </TouchableOpacity>
+                <Text style={styles.bannerNavSep}>|</Text>
+                <TouchableOpacity
+                  onPress={handleLogout}
+                  style={styles.bannerNavItem}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="log-out-outline" size={16} color="rgba(255,255,255,0.85)" />
+                  <Text style={styles.bannerNavItemText}>Deconectare</Text>
+                </TouchableOpacity>
               </View>
-            </View>
+            ) : (
+              <Menu
+                visible={menuVisible}
+                onDismiss={closeMenu}
+                anchor={
+                  <TouchableOpacity
+                    onPress={openMenu}
+                    style={styles.bannerHamburger}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel="Menu"
+                  >
+                    <View style={styles.hamburgerLine} />
+                    <View style={[styles.hamburgerLine, styles.hamburgerLineShort]} />
+                    <View style={styles.hamburgerLine} />
+                  </TouchableOpacity>
+                }
+              >
+                <Menu.Item
+                  title="Programările mele"
+                  onPress={() => { closeMenu(); navigation.navigate('MyAppointments'); }}
+                  leadingIcon="calendar-month-outline"
+                />
+                <Menu.Item
+                  title="Profil"
+                  onPress={() => { closeMenu(); navigation.navigate('UserSettings'); }}
+                  leadingIcon="account-outline"
+                />
+                <Menu.Item
+                  title="Deconectare"
+                  onPress={async () => { closeMenu(); await handleLogout(); }}
+                  leadingIcon="logout"
+                />
+              </Menu>
+            )}
           </View>
         </LinearGradient>
 
@@ -964,9 +1007,10 @@ export const UserDashboardScreen = () => {
                 />
               </View>
 
-              <View style={styles.heroSearchGroupCard}>
-                <View style={styles.heroSearchInner}>
-                  <View style={styles.heroSearchRow}>
+              <View style={styles.heroSearchBarBlock}>
+                <View style={styles.heroSearchGroupCard}>
+                  <View style={styles.heroSearchInner}>
+                    <View style={styles.heroSearchRow}>
                     <View style={styles.heroLeftCluster}>
                       <View style={styles.heroPawCircle}>
                         <MaterialCommunityIcons name="paw" size={22} color="#FFFFFF" />
@@ -1024,8 +1068,10 @@ export const UserDashboardScreen = () => {
                           onPress={() => {
                             setSearchQuery('');
                             setSortMode('none');
+                            setSortByDistance(false);
+                            setSortByRating(false);
                             setFilteredCompanies(companies);
-                            setCompaniesWithDistance(companies.map((c) => ({ company })));
+                            setCompaniesWithDistance(companies.map((c) => ({ company: c })));
                           }}
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                           accessibilityRole="button"
@@ -1052,43 +1098,63 @@ export const UserDashboardScreen = () => {
                         </>
                       )}
                     </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
+
+                {!isServiceSearchActive && (
+                  <View style={styles.heroAvailableNowBelowSearch} pointerEvents="box-none">
+                    <TouchableOpacity
+                      onPress={handleAvailableNowPress}
+                      style={[
+                        styles.availableNowButton,
+                        styles.availableNowButtonBelowSearch,
+                        availableNowMode && styles.availableNowButtonActive,
+                      ]}
+                      disabled={loadingAvailableNow}
+                      activeOpacity={0.8}
+                      accessibilityRole="button"
+                      accessibilityLabel="Disponibil acum"
+                    >
+                      {loadingAvailableNow ? (
+                        <ActivityIndicator size="small" color={availableNowMode ? '#fff' : theme.colors.primary.main} />
+                      ) : (
+                        <>
+                          <View style={[styles.availableNowDot, availableNowMode && styles.availableNowDotActive]} />
+                          <Text
+                            style={[
+                              styles.availableNowButtonText,
+                              styles.availableNowButtonTextBelowSearch,
+                              availableNowMode && styles.availableNowButtonTextActive,
+                            ]}
+                          >
+                            Disponibil acum
+                          </Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
             </View>
           </View>
         </View>
 
-        {/* Find Clinics Section */}
-        {!isServiceSearchActive && (
-          <View style={styles.findClinicsSection}>
-            <View style={styles.findClinicsHeader}>
-              <Text style={styles.sectionTitle}>Găsește clinici</Text>
-              <TouchableOpacity
-                onPress={handleAvailableNowPress}
-                style={[styles.availableNowButton, availableNowMode && styles.availableNowButtonActive]}
-                disabled={loadingAvailableNow}
-                activeOpacity={0.8}
-              >
-                {loadingAvailableNow ? (
-                  <ActivityIndicator size="small" color={availableNowMode ? '#fff' : theme.colors.primary.main} />
-                ) : (
-                  <>
-                    <View style={[styles.availableNowDot, availableNowMode && styles.availableNowDotActive]} />
-                    <Text style={[styles.availableNowButtonText, availableNowMode && styles.availableNowButtonTextActive]}>
-                      Disponibil ACUM
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
+        {/* Find Clinics Section — vizibil și în timpul căutării (ascuns în modul „Disponibil acum”) */}
+        {!availableNowMode && (
+        <View style={styles.findClinicsSection}>
+          <View style={styles.findClinicsHeader}>
+            <Text style={styles.sectionTitle}>
+              {isServiceSearchActive ? 'Rezultate căutare' : 'Găsește clinici apropape de tine'}
+            </Text>
+          </View>
 
             {/* Location Filter Banner */}
             <View style={styles.filterCard}>
               <View style={styles.filterHeader}>
                 <Ionicons name="location" size={20} color={theme.colors.primary.main} />
                 <Text style={styles.filterTitle}>
-                  Locație și sortare
+                  Găsește clinica potivită la un pas de tine
                 </Text>
                 <TouchableOpacity
                   onPress={openMap}
@@ -1102,89 +1168,15 @@ export const UserDashboardScreen = () => {
                 </TouchableOpacity>
               </View>
 
-              {/* Location source: current GPS or Home Address */}
-              <View style={styles.locationSourceRow}>
-                <TouchableOpacity
-                  onPress={handleUseCurrentLocation}
-                  style={[
-                    styles.locationSourceButton,
-                    locationSource === 'current' && styles.locationSourceButtonSelected,
-                  ]}
-                  activeOpacity={0.8}
-                >
-                  {locationSource === 'current' && locationLoading && (
-                    <ActivityIndicator size="small" color="#fff" style={{ marginRight: 6 }} />
-                  )}
-                  <MaterialCommunityIcons
-                    name={locationSource === 'current' ? 'map-marker' : 'map-marker-outline'}
-                    size={18}
-                    color={locationSource === 'current' ? '#fff' : theme.colors.neutral[600]}
-                  />
-                  <Text style={[styles.locationSourceButtonText, locationSource === 'current' && styles.locationSourceButtonTextSelected]}>
-                    Folosește locația curentă
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={handleUseHomeAddress}
-                  style={[
-                    styles.locationSourceButton,
-                    locationSource === 'home' && styles.locationSourceButtonSelected,
-                  ]}
-                  activeOpacity={0.8}
-                >
-                  <MaterialCommunityIcons
-                    name={locationSource === 'home' ? 'home' : 'home-outline'}
-                    size={18}
-                    color={locationSource === 'home' ? '#fff' : theme.colors.neutral[600]}
-                  />
-                  <Text style={[styles.locationSourceButtonText, locationSource === 'home' && styles.locationSourceButtonTextSelected]}>
-                    Folosește Home Address
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {isLocationActive && locationSource !== 'current' && (
-                <View style={[styles.locationInfoBanner, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
-                  <Ionicons name="checkmark-circle" size={16} color="#10b981" />
-                  <Text style={[styles.locationInfoText, { color: '#065f46' }]}>
-                    Locație activă! Poți sorta după distanță și vedea distanțele pe carduri.
-                  </Text>
-                </View>
-              )}
-              {isLocationActive && locationSource === 'current' && permissionStatus === 'granted' && (
-                <View style={[styles.locationInfoBanner, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
-                  <Ionicons name="checkmark-circle" size={16} color="#10b981" />
-                  <Text style={[styles.locationInfoText, { color: '#065f46' }]}>
-                    Locație activă! Poți sorta după distanță și vedea distanțele pe carduri.
-                  </Text>
-                </View>
-              )}
-              {isLocationActive && locationSource === 'current' && permissionStatus === 'denied' && (
-                <View style={styles.locationPermissionBanner}>
-                  <Ionicons name="warning" size={20} color="#b45309" />
-                  <View style={styles.locationPermissionBannerTextWrap}>
-                    <Text style={styles.locationPermissionBannerText}>
-                      Nu ai acordat permisiunile de locație. Pentru a sorta după distanță și a vedea distanța pe carduri, acordă permisiunile.
-                    </Text>
-                    <TouchableOpacity
-                      style={styles.locationPermissionButton}
-                      onPress={() => requestPermission()}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.locationPermissionButtonText}>Acordă permisiuni</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-
-              {/* Sort: Implicit, Rating, Sortează după distanță */}
+              {/* Sort: Implicit, Rating, Sortează după distanță — întâi alegi sortarea; locația apare mai jos doar pentru „distanță” */}
               <View style={styles.filterRow}>
                 <Text style={styles.filterRowLabel}>Sortează</Text>
                 <View style={styles.filterChipsRow}>
                   <TouchableOpacity
                     onPress={() => {
                       setSortMode('none');
+                      setSortByDistance(false);
+                      setSortByRating(false);
                       if ((searchQuery || '').trim().length > 0) {
                         refreshSearchResults();
                       } else {
@@ -1192,28 +1184,146 @@ export const UserDashboardScreen = () => {
                         setCompaniesWithDistance(companies.map((c) => ({ company: c })));
                       }
                     }}
-                    style={[styles.filterChip, sortMode === 'none' && styles.filterChipSelected]}
+                    style={[
+                      styles.filterChip,
+                      sortMode === 'none' && !sortByDistance && !sortByRating && styles.filterChipSelected,
+                    ]}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.filterChipText, sortMode === 'none' && styles.filterChipTextSelected]}>Implicit</Text>
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        sortMode === 'none' && !sortByDistance && !sortByRating && styles.filterChipTextSelected,
+                      ]}
+                    >
+                      Implicit
+                    </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    onPress={handleSortRating}
-                    style={[styles.filterChip, sortMode === 'rating_desc' && styles.filterChipSelected]}
+                    onPress={handleToggleRatingSort}
+                    style={[styles.filterChip, sortByRating && styles.filterChipSelected]}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.filterChipText, sortMode === 'rating_desc' && styles.filterChipTextSelected]}>Rating ★</Text>
+                    <Text style={[styles.filterChipText, sortByRating && styles.filterChipTextSelected]}>Rating ★</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    onPress={handleSortByDistance}
-                    style={[styles.filterChip, sortMode === 'closest' && styles.filterChipSelected]}
+                    onPress={handleToggleDistanceSort}
+                    style={[styles.filterChip, sortByDistance && styles.filterChipSelected]}
                     activeOpacity={0.8}
                   >
-                    <Ionicons name="location" size={16} color={sortMode === 'closest' ? '#fff' : theme.colors.primary.main} />
-                    <Text style={[styles.filterChipText, sortMode === 'closest' && styles.filterChipTextSelected]}>Sortează după distanță</Text>
+                    <Ionicons name="location" size={16} color={sortByDistance ? '#fff' : theme.colors.primary.main} />
+                    <Text style={[styles.filterChipText, sortByDistance && styles.filterChipTextSelected]}>
+                      Sortează după distanță
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </View>
+
+              {isServiceSearchActive && searchScope === 'service' && (
+                <View style={styles.filterRow}>
+                  <Text style={styles.filterRowLabel}>Preț serviciu</Text>
+                  <View style={styles.filterChipsRow}>
+                    <TouchableOpacity
+                      onPress={() => handleSortPrice('asc')}
+                      style={[styles.filterChip, sortMode === 'min_asc' && styles.filterChipSelected]}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.filterChipText, sortMode === 'min_asc' && styles.filterChipTextSelected]}>
+                        Preț crescător ↑
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handleSortPrice('desc')}
+                      style={[styles.filterChip, sortMode === 'max_desc' && styles.filterChipSelected]}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.filterChipText, sortMode === 'max_desc' && styles.filterChipTextSelected]}>
+                        Preț descrescător ↓
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+              {sortByDistance && (
+                <>
+                  {/* Locație: vizibil doar când sortarea după distanță e activă */}
+                  <View style={styles.locationSourceRow}>
+                    <TouchableOpacity
+                      onPress={handleUseCurrentLocation}
+                      style={[
+                        styles.locationSourceButton,
+                        locationSource === 'current' && styles.locationSourceButtonSelected,
+                      ]}
+                      activeOpacity={0.8}
+                    >
+                      {locationSource === 'current' && locationLoading && (
+                        <ActivityIndicator size="small" color="#fff" style={{ marginRight: 6 }} />
+                      )}
+                      <MaterialCommunityIcons
+                        name={locationSource === 'current' ? 'map-marker' : 'map-marker-outline'}
+                        size={18}
+                        color={locationSource === 'current' ? '#fff' : theme.colors.neutral[600]}
+                      />
+                      <Text style={[styles.locationSourceButtonText, locationSource === 'current' && styles.locationSourceButtonTextSelected]}>
+                        Folosește locația curentă
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={handleUseHomeAddress}
+                      style={[
+                        styles.locationSourceButton,
+                        locationSource === 'home' && styles.locationSourceButtonSelected,
+                      ]}
+                      activeOpacity={0.8}
+                    >
+                      <MaterialCommunityIcons
+                        name={locationSource === 'home' ? 'home' : 'home-outline'}
+                        size={18}
+                        color={locationSource === 'home' ? '#fff' : theme.colors.neutral[600]}
+                      />
+                      <Text style={[styles.locationSourceButtonText, locationSource === 'home' && styles.locationSourceButtonTextSelected]}>
+                        Folosește Home Address
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {isLocationActive && locationSource !== 'current' && (
+                    <View style={[styles.locationInfoBanner, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
+                      <Ionicons name="checkmark-circle" size={16} color="#10b981" />
+                      <Text style={[styles.locationInfoText, { color: '#065f46' }]}>
+                        Locație activă! Poți sorta după distanță și vedea distanțele pe carduri.
+                      </Text>
+                    </View>
+                  )}
+                  {isLocationActive && locationSource === 'current' && permissionStatus === 'granted' && (
+                    <View style={[styles.locationInfoBanner, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
+                      <Ionicons name="checkmark-circle" size={16} color="#10b981" />
+                      <Text style={[styles.locationInfoText, { color: '#065f46' }]}>
+                        Locație activă! Poți sorta după distanță și vedea distanțele pe carduri.
+                      </Text>
+                    </View>
+                  )}
+                  {isLocationActive && locationSource === 'current' && permissionStatus === 'denied' && (
+                    <View style={styles.locationPermissionBanner}>
+                      <Ionicons name="warning" size={20} color="#b45309" />
+                      <View style={styles.locationPermissionBannerTextWrap}>
+                        <Text style={styles.locationPermissionBannerText}>
+                          Nu ai acordat permisiunile de locație. Pentru a sorta după distanță și a vedea distanța pe carduri, acordă permisiunile.
+                        </Text>
+                        <TouchableOpacity
+                          style={styles.locationPermissionButton}
+                          onPress={() => requestPermission()}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.locationPermissionButtonText}>Acordă permisiuni</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+                </>
+              )}
 
               {/* Results Count */}
               <View style={styles.resultsContainer}>
@@ -1274,44 +1384,6 @@ export const UserDashboardScreen = () => {
                 </Text>
               </View>
             )}
-            {!availableNowMode && (searchQuery || '').trim().length > 0 && (
-              <View style={styles.resultsSortSection}>
-                <Text style={styles.resultsSortLabel}>Sortează după:</Text>
-                <View style={styles.resultsSortBar}>
-                  {searchScope === 'service' && (
-                    <>
-                      <TouchableOpacity
-                        onPress={() => handleSortPrice('asc')}
-                        style={[styles.sortChip, sortMode === 'min_asc' && styles.sortChipActive]}
-                      >
-                        <Text style={[styles.sortChipText, sortMode === 'min_asc' && { color: '#ffffff' }]}>Preț ↑</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        onPress={() => handleSortPrice('desc')}
-                        style={[styles.sortChip, sortMode === 'max_desc' && styles.sortChipActive]}
-                      >
-                        <Text style={[styles.sortChipText, sortMode === 'max_desc' && { color: '#ffffff' }]}>Preț ↓</Text>
-                      </TouchableOpacity>
-                    </>
-                  )}
-
-                  <TouchableOpacity
-                    onPress={handleSortRating}
-                    style={[styles.sortChip, sortMode === 'rating_desc' && styles.sortChipActive]}
-                  >
-                    <Text style={[styles.sortChipText, sortMode === 'rating_desc' && { color: '#ffffff' }]}>Rating ★</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={handleSortClosest}
-                    style={[styles.sortChip, sortMode === 'closest' && styles.sortChipActive]}
-                  >
-                    <Text style={[styles.sortChipText, sortMode === 'closest' && { color: '#ffffff' }]}>Closest</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
 
             {availableNowMode
               ? availableNowDisplayList.map(({ company, distance, isEmergency }) => (
@@ -1322,11 +1394,11 @@ export const UserDashboardScreen = () => {
                     routeDistance={isLocationActive ? getDistance(String(company.id)) : undefined}
                     matchedService={undefined}
                     emergencyOnly={isEmergency ? { emergency_fee: company.emergency_fee, emergency_contact_phone: company.emergency_contact_phone } : undefined}
-                    onPress={() => handleCompanyPress(company.id)}
+                    onPress={() => handleCompanyPress(company.id, company.name)}
                   />
                 ))
               : companiesWithDistance.map(({ company, distance, matchedService }) => {
-                  const showDistance = sortMode === 'closest';
+                  const showDistance = sortByDistance;
                   const distanceProp = showDistance ? distance : undefined;
                   return (
                     <VetCompanyCard
@@ -1335,7 +1407,7 @@ export const UserDashboardScreen = () => {
                       distance={distanceProp}
                       routeDistance={showDistance ? getDistance(String(company.id)) : undefined}
                       matchedService={matchedService}
-                      onPress={() => handleCompanyPress(company.id)}
+                      onPress={() => handleCompanyPress(company.id, company.name)}
                     />
                   );
                 })}
@@ -1345,20 +1417,6 @@ export const UserDashboardScreen = () => {
         {/* Bottom Padding */}
         <View style={styles.bottomPadding} />
       </ScrollView>
-      {/* Alertă locație necesară (pe web Alert.alert nu apare, folosim Dialog) */}
-      <Portal>
-        <Dialog visible={locationRequiredAlertVisible} onDismiss={() => setLocationRequiredAlertVisible(false)} style={{ maxWidth: 400, alignSelf: 'center', width: '92%' }}>
-          <Dialog.Title>Locația este necesară</Dialog.Title>
-          <Dialog.Content>
-            <Text style={{ fontSize: 15, lineHeight: 22 }}>
-              Activează locația: apasă pe „Folosește locația curentă” sau „Folosește Home Address”, apoi Sortează după distanță.
-            </Text>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setLocationRequiredAlertVisible(false)}>OK</Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
       {/* Map dialog: interactive only on web */}
       <Portal>
         <Dialog visible={mapVisible} onDismiss={() => setMapVisible(false)} style={{ maxWidth: 720, alignSelf: 'center', width: '92%' }}>
@@ -1684,46 +1742,6 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
   },
-  sortControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginLeft: 8,
-  },
-  resultsSortSection: {
-    marginBottom: theme.spacing.lg,
-  },
-  resultsSortLabel: {
-    color: theme.colors.neutral[700],
-    fontWeight: '700',
-    marginBottom: theme.spacing.xs,
-  },
-  resultsSortBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  sortChip: {
-    backgroundColor: '#f3f4f6',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  sortChipActive: {
-    backgroundColor: theme.colors.primary.main,
-    borderColor: theme.colors.primary.main,
-    shadowColor: theme.colors.primary.main,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-  },
-  sortChipText: {
-    fontSize: 13,
-    color: '#374151',
-    fontWeight: '600',
-  },
   distanceChip: {
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -1842,37 +1860,82 @@ const styles = StyleSheet.create({
     height: 32,
   },
   // Compact Header Styles
-  compactHeader: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.lg,
-    paddingBottom: theme.spacing.xl,
+  modernBanner: {
+    paddingHorizontal: theme.spacing.xl,
+    paddingTop: Platform.OS === 'ios' ? theme.spacing['2xl'] : theme.spacing.lg,
+    paddingBottom: theme.spacing.lg,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  compactHeaderContent: {
+  modernBannerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  headerRight: {
+  bannerLogoWrap: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
   },
-  headerIconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  bannerLogoPaw: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerLeft: {
+  bannerLogoText: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  bannerInlineNav: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
   },
-  compactHeaderTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#FFFFFF',
+  bannerNavItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  bannerNavItemText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.92)',
+  },
+  bannerNavSep: {
+    fontSize: 20,
+    color: 'rgba(255, 255, 255, 0.3)',
+    marginHorizontal: 2,
+    fontWeight: '300',
+  },
+  bannerHamburger: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 5,
+  },
+  hamburgerLine: {
+    width: 20,
+    height: 2.5,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 2,
+  },
+  hamburgerLineShort: {
+    width: 14,
+    alignSelf: 'flex-end' as const,
+    marginRight: 0,
   },
   /** Hero dedicat căutării — lavandă foarte pal, ca în mockup */
   searchHeroSection: {
@@ -1917,6 +1980,17 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'stretch',
     position: 'relative',
+  },
+  /** Chenar căutare (lățime 100%) + „Disponibil acum” dedesubt, fără a îngusta bara */
+  heroSearchBarBlock: {
+    width: '100%',
+  },
+  heroAvailableNowBelowSearch: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 8,
+    paddingRight: 2,
   },
   /** Doar bara de căutare (mascotele sunt în afara acestui chenar) */
   heroSearchGroupCard: {
@@ -2027,8 +2101,9 @@ const styles = StyleSheet.create({
   },
   heroSearchCtaText: {
     color: '#1e293b',
-    fontWeight: '800',
     fontSize: 15,
+    fontWeight: '600',
+    ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
   },
   sectionTitle: {
     fontSize: 20,
@@ -2041,11 +2116,6 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.lg,
   },
   findClinicsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: 12,
     marginBottom: 8,
   },
   availableNowButton: {
@@ -2058,6 +2128,12 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: theme.colors.primary.main,
     backgroundColor: 'transparent',
+  },
+  availableNowButtonBelowSearch: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    flexShrink: 0,
   },
   availableNowButtonActive: {
     backgroundColor: theme.colors.primary.main,
@@ -2076,6 +2152,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: theme.colors.primary.main,
+  },
+  availableNowButtonTextBelowSearch: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   availableNowButtonTextActive: {
     color: '#ffffff',

@@ -265,6 +265,39 @@ export const createCompanyController = () => {
     },
 
     /**
+     * Get company by URL slug
+     * GET /api/companies/slug/:slug
+     * Public endpoint
+     */
+    async getBySlug(req: Request, res: Response, next: NextFunction): Promise<void> {
+      try {
+        const { slug } = req.params;
+
+        if (!slug) {
+          res.status(400).json({ success: false, message: 'Slug is required' });
+          return;
+        }
+
+        const company = await CompanyModel.findBySlug(slug);
+
+        if (!company) {
+          res.status(404).json({ success: false, message: 'Company not found' });
+          return;
+        }
+
+        const services = await CompanyServiceModel.findByCompanyId(company.id);
+
+        res.status(200).json({
+          success: true,
+          data: { ...company, services },
+        });
+      } catch (error: any) {
+        console.error('Error fetching company by slug:', error);
+        next(error);
+      }
+    },
+
+    /**
      * Update company
      * PUT /api/companies/:id
      * Requires: authentication, ownership check

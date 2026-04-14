@@ -29,7 +29,7 @@ export type RootStackParamList = {
   UserDashboard: undefined;
   UserSettings: undefined;
   VetCompanyDetail: {
-    companyId: number;
+    companySlug: string;
   };
   CompanyReviews: {
     companyId: number;

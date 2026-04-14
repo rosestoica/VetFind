@@ -63,6 +63,7 @@ const runMigrations = async () => {
       '023_migrate_expired_appointments_to_completed.sql',
       '024_add_user_phone.sql',
       '025_appointments_client_phone.sql',
+      '026_add_company_slug.sql',
     ];
 
     console.log(`\n📋 Found ${migrations.length} migration files to execute\n`);

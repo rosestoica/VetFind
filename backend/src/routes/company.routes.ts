@@ -19,6 +19,9 @@ router.route('/')
   .get(companyController.search) // Public: Get all companies or search with filters
   .post(authMiddleware, requireRole('vetcompany'), companyController.create); // Protected: Create company
 
+// Public: Get company by URL slug (must come before /:id)
+router.get('/slug/:slug', companyController.getBySlug);
+
 // Parameterized routes (must come after specific routes)
 router.route('/:id')
   .get(companyController.getById) // Public: Get company by ID

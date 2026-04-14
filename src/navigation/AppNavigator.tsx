@@ -146,9 +146,9 @@ const AppNavigator: React.FC = () => {
         // main
         Dashboard: 'dashboard',
         UserDashboard: 'dashboard/user',
-        UserSettings: 'dashboard/user/settings',
+        UserSettings: 'dashboard/user/profil',
         // company detail
-        VetCompanyDetail: 'company/:companyId',
+        VetCompanyDetail: ':companySlug',
         // other routes - keep defaults
         CreateCompany: 'company/create',
         CompanyCreatedSuccess: 'company/created',
